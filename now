@@ -1,0 +1,35 @@
+#! /usr/bin/ruby
+
+ACCURACY = 0.08
+
+$chrono = false
+
+
+case ARGV[0]
+when "-h"
+    print "Use the source, Rook\n"
+    exit 0
+when "-s"
+    $chrono = true
+end
+
+start = Time.now
+
+begin
+    loop do
+        now = Time.now
+        if $chrono
+            now = Time.at(now - start).gmtime;
+        end
+        h = now.hour
+        m = now.min
+        s = now.sec
+        u = now.usec / 10000
+        printf "\e[14D[%02d:%02d:%02d.%02.0d]", h,m,s,u
+        STDOUT.flush
+        sleep ACCURACY
+    end
+rescue Interrupt
+    print "\n"
+    exit
+end

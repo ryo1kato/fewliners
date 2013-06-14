@@ -1,0 +1,63 @@
+#!/usr/bin/python
+
+desc="Take list of date/datetime strings and print diff/intervals between them."
+
+import dateutil.parser
+import sys
+import argparse
+
+parser = argparse.ArgumentParser(description=desc)
+parser.add_argument('timestr', metavar='TIMESTR', type=str, nargs='*',
+            help='an integer for the accumulator')
+parser.add_argument('-a', '--abs', action='store_true',
+            help='Calculate absolute values of intervals.')
+parser.add_argument('-r', '--reverse', action='store_true',
+            help='Assume input is in reverse chronological order.')
+parser.add_argument('-f', '--file', metavar='FILENAME',
+            help='Read from file FILENAME instead of stdin.')
+parser.add_argument('-u', '--unit', default='sec',
+            metavar='{"sec"|"min"|"hour"|"day"}',
+            help='Set time unit for output.')
+parser.add_argument('-m', action='store_const', dest='unit', const='m',
+            help='Same as --unit=minute')
+parser.add_argument('-H', action='store_const', dest='unit', const='h',
+            help='Same as --unit=hour')
+parser.add_argument('-d', action='store_const', dest='unit', const='d',
+            help='Same as --unit=day')
+
+args = parser.parse_args()
+
+
+if args.timestr:
+    timestr_array = args.timestr
+else:
+    if args.file:
+        infd = open(args.filename)
+    else:
+        infd = sys.stdin
+    timestr_array = infd.readlines()
+
+
+prev = None
+for timestr in timestr_array:
+    timestamp = dateutil.parser.parse(timestr)
+    if prev:
+        diff = timestamp - prev
+        if args.abs:
+            diff = abs(diff)
+        elif args.reverse:
+            diff = -diff
+
+        if args.unit[0] == 's':
+            print diff.total_seconds()
+        elif args.unit[0] == 'm':
+            print "%.2f" % (diff.total_seconds() / 60)
+        elif args.unit[0] == 'h':
+            print "%.2f" % (diff.total_seconds() / (60*60))
+        elif args.unit[0] == 'd':
+            print diff.days
+        else:
+            sys.stderr.write("Unknown time unit: %s\n" % args.unit)
+            sys.exit(1)
+
+    prev = timestamp

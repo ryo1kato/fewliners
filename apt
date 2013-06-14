@@ -1,0 +1,31 @@
+#!/bin/bash
+
+# a lazy guy's wrapper for apt commands
+
+case $1 in
+    showpkg|showsrc|stats|search|show|depends|rdepends|pkgnames)
+        set -x
+        apt-cache "$@"
+        ;;
+    # short-cuts
+    se|srch) shift; set -x; apt-cache search "$@";;
+    dep)     shift; set -x; apt-cache depends "$@";;
+    rdep)    shift; set -x; apt-cache rdepends "$@";;
+
+    update|upgrade|install|remove|source|check|autoclean|autoremove|uninstall)
+        set -x
+        sudo apt-get "$@"
+        ;;
+    get|cache)
+        aptcmd="apt-$1"
+        shift
+        $aptcmd "$@"
+        ;;
+    ''|-h|--help)
+        echo "Usage: apt {Commands for apt-get or apt-cache}"
+        ;;
+    *)
+        echo "ERROR: unsupported apt-(get|cache) command for this wrapper: $1"
+        exit 1
+        ;;
+esac
