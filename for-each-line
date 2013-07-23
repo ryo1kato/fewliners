@@ -1,0 +1,2 @@
+#!/bin/bash
+xargs -d'\n' -I{} -n1 "$@"
