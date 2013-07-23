@@ -1,0 +1,97 @@
+#!/bin/bash
+
+set -u
+
+print_help () {
+cat <<EOF
+Usage: $0 [OPTIONS] [FILE]
+  like tee(1), but output number of lines while saving to file.
+  This is intended to be used, like pv[1] command, to peek data flows in pipes.
+OPTIONS
+    -h,--help             Show this help
+    -a,--append           Append to file
+    -e,--error            Count lines with /error/i
+    -w,--warn             Count lines with /warn/i
+    -k,--keyword=REGEX    Count lines with /keyword/i
+    -c,--case-sensitive   Make the pattern case-sensitive
+                          (use all upper cases for -e and -w)
+SEE ALSO
+    [1] pv http://www.ivarch.com/programs/pv.shtml
+EOF
+}
+
+###############################################################################
+
+DIE () { MSG "ERROR: $@" >&2; exit 1; }
+
+lastupdate=0
+
+shopt -s nocasematch
+tee_opts='-a'
+tee_file="no"
+opt_error="no"
+opt_warn="no"
+opt_keyword=""
+
+while [ $# -ge 1 ]
+do
+case $1 in
+    -[^-][^-]*)
+        # expand '-abcd' to '-a -bcd' (and eventually '-a -b -c -d')
+        firstarg="$1"; shift
+        set -- ${firstarg:0:2} -${firstarg:2} "$@"; continue;;
+    --*=*)
+        firstarg="$1"; shift;
+        set -- ${firstarg%%=*} ${firstarg#*=} "$@"; continue;;
+    -h|--help)   print_help; exit 0;;
+    -o|--overwrite)  tee_opts="";;
+    -e|--error)   opt_error=yes;;
+    -w|--warn)    opt_warn=yes;;
+    -k|--keyword) opt_keyword="$1"; shift;;
+    -c|--case-sensitive) shopt -u nocasematch;;
+    --) break;;
+    -*) DIE "Unknown option '$1'";;
+    *) break;;
+esac
+shift
+done
+
+
+###############################################################################
+nr_line=0
+nr_error=0
+nr_warn=0
+nr_keyward=0
+
+inc () {
+    let "${1}++" || true
+}
+
+if [ $# -eq 1 ]; then
+    file="$1"
+else
+    file='/dev/null'
+fi
+
+tee "${tee_opts[@]}" "$file" | while read line
+do
+    inc nr_line
+    [[ "$opt_error" = yes    && $line =~ ERROR ]] && inc nr_error
+    [[ "$opt_warn" = yes     && $line =~ WARN ]] && inc nr_warn
+    [[ -n "$opt_keyword"  && $line =~ $opt_keyword ]] && inc nr_keyward
+
+    if [ $SECONDS -ne $lastupdate ]; then
+        echo -n "$nr_line lines"
+        if [ "$opt_error" = yes ]; then
+            echo -n ", $nr_error errors"
+        fi
+        if [ "$opt_warn" = yes ]; then
+            echo -n ", $nr_warn warns"
+        fi
+        if [ -n "$opt_keyword" ]; then
+            echo -n ", $nr_warn keyword matches"
+        fi
+        echo
+        lastupdate=$SECONDS
+    fi
+done
