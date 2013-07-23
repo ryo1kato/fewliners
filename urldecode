@@ -1,4 +1,10 @@
 #!/usr/bin/python
 import sys
 import urllib
-print urllib.unquote_plus(sys.argv[1])
+
+if len(sys.argv) > 1:
+    for arg in sys.argv[1:]:
+        print urllib.unquote_plus(arg)
+else:
+    for line in sys.stdin.readlines():
+        print urllib.unquote_plus(line)
