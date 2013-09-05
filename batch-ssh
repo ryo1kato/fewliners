@@ -1,0 +1,12 @@
+#!/bin/bash
+
+ssh_opts=(
+    -o BatchMode=yes
+    -o CheckHostIP=no
+    -o StrictHostKeyChecking=no
+    -o HashKnownHosts=no
+    -o LogLevel=quiet
+    -o ConnectTimeout=16
+)
+
+ssh "${ssh_opts[@]}" "$@"
