@@ -1,0 +1,64 @@
+#!/bin/bash
+#
+# ping, portping on ssh, ssh, and then check fs status.
+#
+
+set -ue
+
+ssh () {
+    command ssh -o BatchMode=yes -o ConnectTimeout=8 "$@"
+}
+
+my_ping () {
+    ping -w 4 -c 1t $1 >/dev/null 2>&1
+}
+
+my_sshping () {
+    portping $1 >/dev/null 2>&1
+}
+
+my_sshtest () {
+    ssh $1 /bin/true
+}
+
+my_fstest () {
+    if ret=$(ssh $1 "grep 'ext3 .*\<ro\>' /proc/mounts")
+    then
+        echo "$ret"
+        return 1
+    else
+        return 0
+    fi
+}
+
+run_all_pings () {
+    echo -n "$1: "
+    if ! my_ping $1
+    then
+        echo "FAIL: $1: Ping failed"
+        return 1
+    elif ! my_sshping $1
+    then
+        echo "FAIL: $1: SSH port is not open (ping OK)"
+        return 1
+    elif ! my_sshtest $1
+    then
+        echo "FAIL: $1: SSH login with -o BatchMode=yes failed (ssh port open)"
+        return 1
+    elif ! ret=$(my_fstest $1)
+    then
+        echo "FAIL: $1: There's readonly ext3 filesystem: ${ret%% *} (login OK)"
+        return 1
+    else
+        echo "OK"
+        return 0
+    fi
+}
+
+errors=0
+for h in "$@"
+do
+    run_all_pings $h || (let errors++ && true)
+done
+
+exit $(( errors != 0 ))

@@ -1,4 +1,7 @@
 #!/bin/bash
+#
+# ssh wrapper useful for batch execution:
+#
 
 ssh_opts=(
     -o BatchMode=yes
