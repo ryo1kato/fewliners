@@ -1,0 +1,65 @@
+#!/usr/bin/python
+# TODO:
+#   * Handle floats
+#   * Use delimieter other than ','
+#   * avg / median instead of sum
+#   * --strict: warn/error if number of cells for lines mismatch or there's a null cell.
+#   * -F,--ifs : set Input Field Separator
+#   * --ofs    : set Output Field Separator
+#   * --pretty : human readable output
+
+import sys
+
+def sumarrays(*arrays):
+    ret = []
+    for ary in map(None, *arrays):
+        ret.append( sum( filter(lambda x: x is not None, ary) ) )
+    return ret
+
+def myint(x):
+    if x == '':
+        return 0
+    else:
+        return int(x)
+
+# if any of cell in the first line, except left-most cell, contains anything
+# other than number, consider it as a header line.
+line = sys.stdin.readline().rstrip()
+if all([ x.isdigit() for x in line.split(',')[1:] ]):
+    header = None
+else:
+    header = line
+    line = sys.stdin.readline().rstrip()
+
+# if first cell of the first data row contains non-number char
+# consider it as a attribute name and sum numbers for each of
+# the attribute. Else, just sum up all the cells in columns.
+if (line.split(',')[0]).isdigit():
+    sums = []
+else:
+    sums = {}
+
+
+while line:
+    cols = line.split(',')
+    if isinstance(sums,dict):
+        if cols[0] in sums:
+            sums[cols[0]] = sumarrays(sums[cols[0]], map(myint,cols[1:]))
+        else:
+            sums[cols[0]] = map(myint,cols[1:])
+    else:
+        sums = sumarrays(sums, map(myint,cols))
+    line = sys.stdin.readline().rstrip()
+
+
+# then print the result
+if header:
+    print header
+
+
+if isinstance(sums,dict):
+    for attr in sums:
+        print ','.join([attr] + map(str,sums[attr]))
+else:
+    print ','.join(map(str,sums))
+
