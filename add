@@ -1,20 +1,17 @@
 #!/usr/bin/python
 # TODO:
 #   * Handle floats
-#   * Use delimieter other than ','
+#   * Use delimiter other than ','
 #   * avg / median instead of sum
 #   * --strict: warn/error if number of cells for lines mismatch or there's a null cell.
 #   * -F,--ifs : set Input Field Separator
 #   * --ofs    : set Output Field Separator
 #   * --pretty : human readable output
+#
 
 import sys
+import re
 
-def sumarrays(*arrays):
-    ret = []
-    for ary in map(None, *arrays):
-        ret.append( sum( filter(lambda x: x is not None, ary) ) )
-    return ret
 
 def myint(x):
     if x == '':
@@ -23,15 +20,193 @@ def myint(x):
         return int(x)
 
 
+def isnum(string):
+    return string.replace(".", "", 1).isdigit()
+
+
+class BadLineError(Exception):
+    pass
+
+class BadCellError(Exception):
+    pass
+
+class EmptyCellError(Exception):
+    pass
+
+
+
+def guess_delimiter(line):
+    if ',' in line:
+        return ','
+    elif '\t' in line:
+        return '\t'
+    else:
+        return ' +'
+
+
+class Tabulation(object):
+    def __init__(self, firstline=None, delimiter=None,
+                ignore=False, ignore_error=False, ignore_empty=True):
+        self.accum        = None
+        self.delim        = None
+        self.ignore       = ignore
+        self.ignore_error = ignore_error
+        self.ignore_empty = ignore_empty
+        self.initialized  = False
+        if firstline is not None:
+            self._initialize(firstline, delimiter)
+
+    def _initialize(self, firstline, delimiter=None):
+        if isinstance(firstline, list):
+            self.delim = None
+            cols = firstline
+        else:
+            self.delim = delimiter or guess_delimiter(firstline)
+            cols = self.split(firstline)
+
+        self.initialized = True
+
+        if all([ isnum(x) for x in cols[1:] ]):
+            self.header = None
+            self.feed(cols)
+        else:
+            self.header = cols
+
+    def split(self, line, delimiter=None):
+        """
+        >>> t = Tabulation(ignore_error=True)
+        >>> t.split("foo,bar,baz")
+        ['foo', 'bar', 'baz']
+        >>> t.delim = None; t.split("foo bar   baz  ")
+        ['foo', 'bar', 'baz']
+        >>> t.delim = None; t.split("foo\tbar\tbaz")
+        ['foo', 'bar', 'baz']
+        """
+        if delimiter is not None:
+            self.delim = delimiter
+        elif self.delim is None:
+            self.delim = guess_delimiter(line)
+        line = line.rstrip()
+        return re.split(self.delim, line)
+
+    def _combine(self, a, cell):
+        """
+        >>> t = Tabulation(ignore_error=True)
+        >>> t._combine([1, 2], "3")
+        [1, 2, 3]
+        >>> t._combine([1, 2], "3.0")
+        [1, 2, 3.0]
+        >>> t._combine(None, "123")
+        [123]
+        >>> t._combine([1, 2], "broken")
+        [1, 2]
+        >>> t._combine(None, "broken")
+        []
+        """
+        if cell is None:
+            return a
+        else:
+            cell = cell.strip()
+            if isnum(cell):
+                if '.' in cell:
+                    num = float(cell)
+                else:
+                    num = int(cell)
+            elif cell == '':
+                if self.ignore or self.ignore_empty:
+                    num = None
+                else:
+                    raise EmptyCellError()
+            else:
+                if self.ignore or self.ignore_error:
+                    num = None
+                else:
+                    raise BadCellError(cell)
+
+            if num is None:
+                if a is None:
+                    return []
+                else:
+                    return a
+            elif a is None:
+                return [num]
+            else:
+                return a + [num]
+
+    def feed(self, cols):
+        if not self.initialized:
+            self._initialize(cols)
+        else:
+            if self.accum is None:
+                if isnum(cols[0]):
+                    self.accum = [] # list of Column
+                else:
+                    self.accum = {} # dict of list of Column
+
+            if isinstance(self.accum, dict):
+                key = cols[0]
+                cols = cols[1:]
+                if key in self.accum:
+                    self.accum[key] = map(self._combine, self.accum[key], cols)
+                else:
+                    self.accum[key] = map(self._combine, [], cols)
+            elif isinstance(self.accum, list):
+                self.accum = map(self._combine, self.accum, cols)
+            else:
+                raise Exception("You found a bug")
+
+
+    def feedline(self, line, delimiter=None):
+        """
+        >>> t = Tabulation("1,2,3")
+        >>> t.feedline("4,5,6")
+        >>> t.accum
+        [[1, 4], [2, 5], [3, 6]]
+        >>> t = Tabulation("attr col1 col2")
+        >>> t.feedline("foo 1 2")
+        >>> t.feedline("bar 12 34")
+        >>> t.feedline("foo 3 4")
+        >>> t.feedline("bar 56 78")
+        >>> t.header
+        ['attr', 'col1', 'col2']
+        >>> t.accum
+        {'foo': [[1, 3], [2, 4]], 'bar': [[12, 56], [34, 78]]}
+        """
+        cols = self.split(line, delimiter)
+        self.feed(cols)
+
+    def calc(self, f):
+        if isinstance(self.accum, dict):
+            a = {}
+            for i in self.accum:
+                a[i] = map(f, self.accum[i])
+                return a
+        else:
+            return map(f, self.accum)
+
+    def sum(self):
+        """
+        >>> t = Tabulation("1,2,3"); t.feedline("4,5,6"); t.feedline("7,8,9");
+        >>> t.sum()
+        [12, 15, 18]
+        >>> t.avg()
+        [4.0, 5.0, 6.0]
+        """
+        return self.calc(sum)
+
+    def avg(self):
+        return self.calc(lambda x: float(sum(x))/len(x))
+
+
+
+def sumarrays(*arrays):
+    ret = []
+    for ary in map(None, *arrays):
+        ret.append( sum( filter(lambda x: x is not None, ary) ) )
+    return ret
+
+
 def add(i, o):
-    """ So this is the test
-    >>> import StringIO
-    >>> i1 = StringIO.StringIO()
-    >>> i1.write('1,2,3\\n')
-    >>> i1.write('4,5,6\\n')
-    >>> add(i1, sys.stdout)
-    5,7,9
-    """
     # if any of cell in the first line, except left-most cell, contains anything
     # other than number, consider it as a header line.
     line = i.readline().rstrip()
