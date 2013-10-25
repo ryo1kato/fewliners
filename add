@@ -22,44 +22,67 @@ def myint(x):
     else:
         return int(x)
 
-# if any of cell in the first line, except left-most cell, contains anything
-# other than number, consider it as a header line.
-line = sys.stdin.readline().rstrip()
-if all([ x.isdigit() for x in line.split(',')[1:] ]):
-    header = None
-else:
-    header = line
-    line = sys.stdin.readline().rstrip()
 
-# if first cell of the first data row contains non-number char
-# consider it as a attribute name and sum numbers for each of
-# the attribute. Else, just sum up all the cells in columns.
-if (line.split(',')[0]).isdigit():
-    sums = []
-else:
-    sums = {}
-
-
-while line:
-    cols = line.split(',')
-    if isinstance(sums,dict):
-        if cols[0] in sums:
-            sums[cols[0]] = sumarrays(sums[cols[0]], map(myint,cols[1:]))
-        else:
-            sums[cols[0]] = map(myint,cols[1:])
+def add(i, o):
+    """ So this is the test
+    >>> import StringIO
+    >>> i1 = StringIO.StringIO()
+    >>> i1.write('1,2,3\\n')
+    >>> i1.write('4,5,6\\n')
+    >>> add(i1, sys.stdout)
+    5,7,9
+    """
+    # if any of cell in the first line, except left-most cell, contains anything
+    # other than number, consider it as a header line.
+    line = i.readline().rstrip()
+    if all([ x.isdigit() for x in line.split(',')[1:] ]):
+        header = None
     else:
-        sums = sumarrays(sums, map(myint,cols))
-    line = sys.stdin.readline().rstrip()
+        header = line
+        line = i.readline().rstrip()
+
+    # if first cell of the first data row contains non-number char
+    # consider it as a attribute name and sum numbers for each of
+    # the attribute. Else, just sum up all the cells in columns.
+    if (line.split(',')[0]).isdigit():
+        sums = []
+    else:
+        sums = {}
 
 
-# then print the result
-if header:
-    print header
+    while line:
+        cols = line.split(',')
+        if isinstance(sums,dict):
+            if cols[0] in sums:
+                sums[cols[0]] = sumarrays(sums[cols[0]], map(myint,cols[1:]))
+            else:
+                sums[cols[0]] = map(myint,cols[1:])
+        else:
+            sums = sumarrays(sums, map(myint,cols))
+        line = i.readline().rstrip()
 
 
-if isinstance(sums,dict):
-    for attr in sums:
-        print ','.join([attr] + map(str,sums[attr]))
-else:
-    print ','.join(map(str,sums))
+    # then print the result
+    if header:
+        o.write(header + '\n')
+
+
+    if isinstance(sums,dict):
+        for attr in sums:
+            o.write(','.join([attr] + map(str,sums[attr])) + '\n')
+    else:
+        o.write(','.join(map(str,sums)) + '\n')
+
+
+
+def main(args):
+    if (args and args[0] == '--doctest'):
+        import doctest
+        doctest.testmod()
+    else:
+        add(sys.stdin, sys.stdout)
+
+
+if __name__ == '__main__':
+    main(sys.argv[1:])
 
