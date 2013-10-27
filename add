@@ -1,23 +1,21 @@
 #!/usr/bin/python
-# TODO:
-#   * Handle floats
-#   * Use delimiter other than ','
-#   * avg / median instead of sum
-#   * --strict: warn/error if number of cells for lines mismatch or there's a null cell.
-#   * -F,--ifs : set Input Field Separator
-#   * --ofs    : set Output Field Separator
-#   * --pretty : human readable output
 #
+#
+desc="Calculate sum/avg of each columns for table-like text file data like *.csv."
 
-import sys
+import argparse
 import re
+import sys
 
+parser = argparse.ArgumentParser(description=desc)
+parser.add_argument('filename', metavar='FILE', type=str, nargs='?')
+parser.add_argument('-F', metavar='IFS', default=None,
+            help='Input field separator, like awk')
+parser.add_argument('--strict', dest='ignore_error', action='store_true', default=False,
+            help='Do not ignore malformed field in the input.')
+parser.add_argument('--ignore', action='store_true', default=False,
+            help='Do not ignore malformed field in the input.')
 
-def myint(x):
-    if x == '':
-        return 0
-    else:
-        return int(x)
 
 
 def isnum(string):
@@ -55,13 +53,15 @@ class Tabulation(object):
         self.initialized  = False
         if firstline is not None:
             self._initialize(firstline, delimiter)
+        else:
+            self.delim = delimiter
 
     def _initialize(self, firstline, delimiter=None):
         if isinstance(firstline, list):
-            self.delim = None
+            if self.delim is None:
+                self.delim = delimiter
             cols = firstline
         else:
-            self.delim = delimiter or guess_delimiter(firstline)
             cols = self.split(firstline)
 
         self.initialized = True
@@ -80,6 +80,8 @@ class Tabulation(object):
         >>> t.delim = None; t.split("foo bar   baz  ")
         ['foo', 'bar', 'baz']
         >>> t.delim = None; t.split("foo\tbar\tbaz")
+        ['foo', 'bar', 'baz']
+        >>> t.delim = ':'; t.split("foo:bar:baz")
         ['foo', 'bar', 'baz']
         """
         if delimiter is not None:
@@ -180,73 +182,67 @@ class Tabulation(object):
             a = {}
             for i in self.accum:
                 a[i] = map(f, self.accum[i])
-                return a
-        else:
+            return a
+        elif isinstance(self.accum, list):
             return map(f, self.accum)
+        else:
+            return None
 
     def sum(self):
         """
-        >>> t = Tabulation("1,2,3"); t.feedline("4,5,6"); t.feedline("7,8,9");
+        >>> t = Tabulation("1,2,3"); t.feedline("4,5,6"); t.feedline("7,8,9")
         >>> t.sum()
         [12, 15, 18]
         >>> t.avg()
         [4.0, 5.0, 6.0]
+        >>> t = Tabulation("foo,1,2,3")
+        >>> t.feedline("bar,4,5,6");  t.feedline("foo,7,8,9")
+        >>> t.feedline("baz,7,6,5");  t.feedline("bar,3,2,1")
+        >>> t.sum() == {'foo': [8, 10, 12], 'bar': [7, 7, 7], 'baz': [7, 6, 5]}
+        True
+        >>> t.avg() == {'foo': [4.0, 5.0, 6.0], 'bar': [3.5, 3.5, 3.5], 'baz': [7.0, 6.0, 5.0]}
+        True
         """
         return self.calc(sum)
 
     def avg(self):
         return self.calc(lambda x: float(sum(x))/len(x))
 
-
-
-def sumarrays(*arrays):
-    ret = []
-    for ary in map(None, *arrays):
-        ret.append( sum( filter(lambda x: x is not None, ary) ) )
-    return ret
-
-
-def add(i, o):
-    # if any of cell in the first line, except left-most cell, contains anything
-    # other than number, consider it as a header line.
-    line = i.readline().rstrip()
-    if all([ x.isdigit() for x in line.split(',')[1:] ]):
-        header = None
-    else:
-        header = line
-        line = i.readline().rstrip()
-
-    # if first cell of the first data row contains non-number char
-    # consider it as a attribute name and sum numbers for each of
-    # the attribute. Else, just sum up all the cells in columns.
-    if (line.split(',')[0]).isdigit():
-        sums = []
-    else:
-        sums = {}
-
-
-    while line:
-        cols = line.split(',')
-        if isinstance(sums,dict):
-            if cols[0] in sums:
-                sums[cols[0]] = sumarrays(sums[cols[0]], map(myint,cols[1:]))
-            else:
-                sums[cols[0]] = map(myint,cols[1:])
+    def output(self, outfd, calc='sum', delimiter=None, align=None):
+        """ FIXME: align not implemented yet.
+        """
+        if delimiter:
+            ofs = delimiter
+        elif len(self.delim) == 1:
+            ofs = self.delim
         else:
-            sums = sumarrays(sums, map(myint,cols))
-        line = i.readline().rstrip()
+            ofs = ' '
+            if align is None:
+                align=True
+
+        if calc == 'sum':
+            s = self.sum()
+        elif calc == 'avg':
+            s = self.avg()
+
+        if self.header:
+            outfd.write(ofs.join(self.header) + '\n')
+
+        if isinstance(s, dict):
+            for key in self.accum:
+                outfd.write(ofs.join([key] + map(str, s[key])) + '\n')
+        else:
+            outfd.write(ofs.join(map(str,s)) + '\n')
 
 
-    # then print the result
-    if header:
-        o.write(header + '\n')
 
-
-    if isinstance(sums,dict):
-        for attr in sums:
-            o.write(','.join([attr] + map(str,sums[attr])) + '\n')
-    else:
-        o.write(','.join(map(str,sums)) + '\n')
+def calc_lines(i, delimiter=None):
+    line = i.readline()
+    t = Tabulation(delimiter=delimiter)
+    while line:
+        t.feedline(line)
+        line = i.readline()
+    return t
 
 
 
@@ -255,7 +251,15 @@ def main(args):
         import doctest
         doctest.testmod()
     else:
-        add(sys.stdin, sys.stdout)
+        args = parser.parse_args(args)
+        if args.filename:
+            f = open(args.filename)
+            t = calc_lines(f, args.F)
+        else:
+            t = calc_lines(sys.stdin, args.F)
+
+        t.output(sys.stdout, 'sum')
+
 
 
 if __name__ == '__main__':
