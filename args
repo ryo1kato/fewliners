@@ -1,0 +1,57 @@
+#!/bin/bash
+#
+# print given args, one arg per line.
+#
+set -ue
+
+print_help () {
+cat <<EOF
+Usage: $0 [OPTIONS] [--] [ARGS...|/prod/[0-9]*/cmdline]
+  Print
+OPTIONS
+  -h, --help   Print this help
+  -f, --full   Don't omit long (by default, cut by \$COLUMNS chars)
+EOF
+}
+
+
+opt_full=no
+opt_cmdline=no
+
+print_args () {
+    for arg in "$@"
+    do
+        if [ "$opt_full" = yes ]
+        then
+            echo ${arg}
+        else
+            width=${COLUMNS:-80}
+            if [ ${#arg} -gt $width ]
+            then
+                echo ${arg:0:$width} ...
+            else
+                echo ${arg}
+            fi
+        fi
+    done
+}
+
+
+while [ $# -gt 0 ]
+do
+    case $1 in
+        -h|--help) print_help; exit 0;;
+        -f|--full) opt_full=yes;;
+        /proc/[0-9]*/cmdline) opt_cmdline=yes; cmdline=$1;;
+        --) shift; break;;
+        *) break;;
+    esac
+    shift
+done
+
+if [ "$opt_cmdline" = yes ]
+then
+    cat "$cmdline" | xargs -0 "$0"
+else
+    print_args "$@"
+fi
