@@ -80,7 +80,12 @@ class Tabulation(object):
 
         self.initialized = True
 
-        if all([ isnum(x) for x in cols[1:] ]):
+        # when first line is a non-number cell,
+        # - it's header if there's only one column (len(cols)==1)
+        # - it's attribute-name to be aggregated if there's more than 2 colums
+        #   AND any of cols[1:] is non-number cell, it's header.
+        if (len(cols)==1 and isnum(cols[0])) or \
+            (len(cols)>1  and all(len(cols)>1 and [ isnum(x) for x in cols[1:] ])):
             self.header = None
             self.feed(cols)
         else:
