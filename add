@@ -1,8 +1,9 @@
 #!/usr/bin/python
 #
 #
-desc="Calculate sum/avg of each columns for table-like text file data like *.csv."
+desc="Calculate sum/avg/min/max or percentile of columns for CSV like data."
 
+import math
 import argparse
 import re
 import sys
@@ -10,17 +11,29 @@ import sys
 parser = argparse.ArgumentParser(description=desc)
 parser.add_argument('filename', metavar='FILE', type=str, nargs='?')
 parser.add_argument('-F', metavar='IFS', default=None,
-            help='Input field separator, like awk')
-parser.add_argument('--strict', dest='ignore_error', action='store_true', default=False,
-            help='Do not ignore malformed field in the input.')
-parser.add_argument('--ignore', action='store_true', default=False,
-            help='Do not ignore malformed field in the input.')
-
+        help='Input field separator, like awk (default: auto-detect')
+#parser.add_argument('--strict', dest='ignore_error', action='store_true', default=False,
+#            help='Do not ignore malformed field in the input.')
+#parser.add_argument('--ignore', action='store_true', default=False,
+#            help='Ignore malformed field in the input.')
+parser.add_argument('-H', '--no-header', action='store_false', dest='with_header', default=True,
+        help='Do not print header')
+parser.add_argument('-s', '--sum', dest='calc', action='store_const', const='sum',
+        help='Calculate sum of the cells for columns. (default)')
+parser.add_argument('-a', '--avg', dest='calc', action='store_const', const='avg',
+        help='Calculate average of the cells for columns.')
+parser.add_argument('--max', dest='percentile', action='store_const', const='100',
+        help='Same as --percentile=100.')
+parser.add_argument('--min', dest='percentile', action='store_const', const='0',
+        help='Same as --percentile=0.')
+parser.add_argument('-p', '--percentile', metavar='NUM', dest='percentile', default=None,
+        help='Calculate percentile NUM of the cells for columns.')
+#parser.add_argument('-d', '--stddev', dest='calc', action='store_const', default=False,
+#        help='Calculate standard deviation of the cells for columns.')
 
 
 def isnum(string):
     return string.replace(".", "", 1).isdigit()
-
 
 class BadLineError(Exception):
     pass
@@ -51,6 +64,7 @@ class Tabulation(object):
         self.ignore_error = ignore_error
         self.ignore_empty = ignore_empty
         self.initialized  = False
+        self.header       = None
         if firstline is not None:
             self._initialize(firstline, delimiter)
         else:
@@ -208,12 +222,23 @@ class Tabulation(object):
     def avg(self):
         return self.calc(lambda x: float(sum(x))/len(x))
 
-    def output(self, outfd, calc='sum', delimiter=None, align=None):
+    def percentile(self, num):
+        if num >= 100:
+            return self.calc(lambda x: sorted(x)[-1])
+        elif num <= 0:
+            return self.calc(lambda x: sorted(x)[0])
+        else:
+            return self.calc(lambda x:
+                    sorted(x)[ int(math.ceil(len(x)/100.0*num)) - 1 ])
+
+
+    def output(self, outfd, calc='sum', calc_arg=None,
+                delimiter=None, align=None, print_header=True):
         """ FIXME: align not implemented yet.
         """
         if delimiter:
             ofs = delimiter
-        elif len(self.delim) == 1:
+        elif self.delim and len(self.delim) == 1:
             ofs = self.delim
         else:
             ofs = ' '
@@ -224,15 +249,20 @@ class Tabulation(object):
             s = self.sum()
         elif calc == 'avg':
             s = self.avg()
+        elif calc == 'percentile':
+            s = self.percentile(calc_arg)
 
-        if self.header:
+        if self.header and print_header:
             outfd.write(ofs.join(self.header) + '\n')
 
         if isinstance(s, dict):
             for key in self.accum:
                 outfd.write(ofs.join([key] + map(str, s[key])) + '\n')
-        else:
+        elif isinstance(s, list):
             outfd.write(ofs.join(map(str,s)) + '\n')
+        else:
+            # empty input
+            pass
 
 
 
@@ -258,8 +288,13 @@ def main(args):
         else:
             t = calc_lines(sys.stdin, args.F)
 
-        t.output(sys.stdout, 'sum')
-
+    if args.percentile:
+        t.output(sys.stdout, 'percentile', float(args.percentile),
+                 print_header=args.with_header)
+    elif args.calc == 'avg':
+        t.output(sys.stdout, 'avg', print_header=args.with_header)
+    else:
+        t.output(sys.stdout, 'sum', print_header=args.with_header)
 
 
 if __name__ == '__main__':
