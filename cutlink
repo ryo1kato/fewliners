@@ -1,0 +1,125 @@
+#!/bin/sh
+#
+# cutlink - Convert hardlink-ed file to just a copy.
+#
+#   Basically, the command does the following, with many checks.
+#
+#       $ cp $file $file.tmp
+#       $ rm -f $file
+#       $ mv $file.tmp $file
+#
+
+progname="${0##*/}"
+
+DIE () {
+    echo "ERROR: $@" >&2
+    exit 1
+}
+
+HELP () {
+    echo "$progname: convert hardlink-ed file to just a copy."
+    echo "Usage: $progname HARDLINKED_FILE"
+    echo "Usage: $progname -s SYMLINKED_FILE_OR_DIR"
+    echo "OPTIONS:"
+    echo "  -s,--symlink  Cutlink for symlink instead of hardlink (allow directory)"
+}
+
+cut_hardlink () {
+    if [ -d "$1" ]; then
+        DIE "$1 is a directory (use --symlink for symlink-ed directory)"
+    fi
+
+    if [ ! -e "$1" ]; then
+        DIE "$1 doen't exist"
+    fi
+
+    if [ ! -r "$1" ]; then
+        DIE "$1 is not readable"
+    fi
+
+    link_count=`stat -c %h "$1"`
+    if [  $link_count -le 1 ]; then
+        DIE "$1 is not hard-linked (link count is $link_count)"
+    fi
+
+    echo -n "Old: ";ls -i $1
+
+    tmp_filename="$1.tmp.$$"
+    trap 'echo "Aborintg ..."; rm -f "$tmp_filename"; exit 1' INT
+    if cp "$1" "$tmp_filename"
+    then
+        trap "echo Cannot abort" INT
+        rm -f "$1"
+        mv "$tmp_filename" "$1"
+        chmod +w "$1"
+    else
+        rm -f "$tmp_filename"
+        DIE "Copy to $tmp_filename failed"
+    fi
+    trap - INT
+
+    echo -n "New: "; ls -i $1
+}
+
+
+cut_symlink () {
+    if [ ! -L "$1" ]; then
+        DIE "$1 is not symlink"
+    fi
+
+    echo -n "Old: ";ls -ld $1
+
+    tmp_filename="$1.tmp.$$"
+    trap 'echo "Aborintg ..."; rm -rf "$tmp_filename"; exit 1' INT
+
+    if {
+        if [ -d "$1" ]; then
+            cp -a "$1"/ "$tmp_filename"
+        else
+            cp "$1" "$tmp_filename"
+        fi
+    }
+    then
+        trap "echo Cannot abort" INT
+        rm -f "$1"
+        mv "$tmp_filename" "$1"
+        chmod +w "$1"
+    else
+        rm -f "$tmp_filename"
+        DIE "Copy to $tmp_filename failed"
+    fi
+    trap - INT
+    echo -n "New: ";ls -ld $1
+}
+
+
+case $1 in
+    -h|--help)
+        HELP
+        exit 0
+        ;;
+    -s|--symlink)
+        opt_symlink=yes
+        shift
+        ;;
+    -*)
+        DIE "Unknown option: $1"
+        ;;
+esac
+
+
+if [ -z "$1" ]; then
+    DIE "No file specified. See '$progname --help' for help."
+fi
+
+if [ "$opt_symlink" == "yes" ]; then
+    for file in "$@"
+    do
+        cut_symlink "$file"
+    done
+else
+    for file in "$@"
+    do
+        cut_hardlink "$file"
+    done
+fi
