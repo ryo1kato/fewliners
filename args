@@ -1,57 +1,115 @@
 #!/bin/bash
 #
-# print given args, one arg per line.
+# Pretty print args of a process of given PID (read from /proc/<PID>/cmdline),
+# or print all arguemnts one arg per line.
+# Doesn't work as expected if there's an arg with newline('\n') in it.
 #
 set -ue
+trap 'echo "$0: Unexpected error at line $LINENO" >&2; exit 1;' ERR
+
+DIE () {
+    echo "$0: ERROR: $*"
+    exit 1
+}
 
 print_help () {
 cat <<EOF
-Usage: $0 [OPTIONS] [--] [ARGS...|/prod/[0-9]*/cmdline]
-  Print
+Usage: $0 [OPTIONS] [--] {PID|ARGS} [...]
+  Pretty-print long array of arguments to see what's a command is running.
+  If there's only one argument and it's a number(PID), this command prints
+  args of the process of that PID (from /proc/<PID>/cmdline), one per line.
+  If there's more than two arguments, or the first argument is not a
+  number, it prints all arguments one per line.
+  By default long line will be shoten to make it fit in one line.
+  You can suppress that behavior by '-f' option
 OPTIONS
+  -p, --pid    Force interpretation of
+  -n, --number Print line number
   -h, --help   Print this help
   -f, --full   Don't omit long (by default, cut by \$COLUMNS chars)
 EOF
 }
 
-
+recursive_opts=()
 opt_full=no
-opt_cmdline=no
+opt_lineno=no
+opt_pid=no
+
+default_cols=80
+mid_omit_minimum=60
+tail_keep=10
+
+shorten () {
+    offset="$1" # adjust line length with -n option etc.
+    dots="..."
+    cols=$(tput cols || echo $default_cols) >/dev/null 2>&1
+    (( cols = cols - offset ))
+    if [ ${#arg} -gt $cols ]
+    then
+        (( width = cols - ${#dots} ))
+        if (( cols > mid_omit_minimum + ${#dots} + tail_keep))
+        then
+            (( mid_omit_start = cols - ${#dots} - tail_keep))
+            (( tailstart = ${#arg} - tail_keep ))
+            echo "${arg:0:$mid_omit_start}${dots}${arg:tailstart}"
+        else
+            echo "${arg:0:$width}${dots}"
+        fi
+    else
+        echo "${arg}"
+    fi
+}
 
 print_args () {
+    i=1
+    offset=0
     for arg in "$@"
     do
+        if [ "$opt_lineno" = yes ]
+        then
+            printf '%3d ' $((i++))
+            offset=4
+        fi
         if [ "$opt_full" = yes ]
         then
-            echo ${arg}
+            echo "$arg"
         else
-            width=${COLUMNS:-80}
-            if [ ${#arg} -gt $width ]
-            then
-                echo ${arg:0:$width} ...
-            else
-                echo ${arg}
-            fi
+            shorten $offset "$arg"
         fi
     done
 }
 
-
 while [ $# -gt 0 ]
 do
     case $1 in
-        -h|--help) print_help; exit 0;;
-        -f|--full) opt_full=yes;;
-        /proc/[0-9]*/cmdline) opt_cmdline=yes; cmdline=$1;;
-        --) shift; break;;
-        *) break;;
+    -h|--help)   print_help; exit 0;;
+    -p|--pid)    opt_pid=yes;;
+    -f|--full)   opt_full=yes;   recursive_opts+=('-f');;
+    -n|--number) opt_lineno=yes; recursive_opts+=('-n');;
+    --) shift; break;;
+    *) break;;
     esac
     shift
 done
 
-if [ "$opt_cmdline" = yes ]
+[ $# -eq 1 ] && [[ $1 =~ [0-9]+ ]] && opt_pid=yes
+if [ "$opt_pid" = yes -a $# -ne 1 ]
 then
-    cat "$cmdline" | xargs -0 "$0"
+    DIE "-p/--pid option takes only one argument"
+fi
+
+# Need this to prevent expansion error caused by set -u
+recursive_opts+=('--')
+
+if [ "$opt_pid" = yes ]
+then
+    cmdline="/proc/$1/cmdline"
+    if [ -r $cmdline ]
+    then
+        cat "$cmdline" | xargs -0 "$0" ${recursive_opts[@]}
+    else
+        DIE "Cannot read $cmdline. Invalid PID or process exited?"
+    fi
 else
     print_args "$@"
 fi
