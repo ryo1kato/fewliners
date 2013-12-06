@@ -187,11 +187,11 @@ do
     case $1 in
     -h|--help)   print_help; exit 0;;
     -p|--pid)    opt_pid=yes;;
-    -f|--full)   opt_full=yes;   recursive_opts+=('$1');;
-    -n|--number) opt_lineno=yes; recursive_opts+=('$1');;
-    -m|--mono)   opt_color=no;   recursive_opts+=('$1');;
-    -c|--color)  opt_color=yes;  recursive_opts+=('$1');;
-    -e|--escape) opt_escape=yes; recursive_opts+=('$1');;
+    -f|--full)   opt_full=yes;   recursive_opts+=("$1");;
+    -n|--number) opt_lineno=yes; recursive_opts+=("$1");;
+    -m|--mono)   opt_color=no;   recursive_opts+=("$1");;
+    -c|--color)  opt_color=yes;  recursive_opts+=("$1");;
+    -e|--escape) opt_escape=yes; recursive_opts+=("$1");;
     --) shift; break;;
     *) break;;
     esac
