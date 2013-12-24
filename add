@@ -263,11 +263,13 @@ class Tabulation(object):
         if isinstance(s, dict):
             for key in self.accum:
                 outfd.write(ofs.join([key] + map(str, s[key])) + '\n')
+            return True
         elif isinstance(s, list):
             outfd.write(ofs.join(map(str,s)) + '\n')
+            return True
         else:
             # empty input
-            pass
+            return False
 
 
 
@@ -294,12 +296,18 @@ def main(args):
             t = calc_lines(sys.stdin, args.F)
 
     if args.percentile:
-        t.output(sys.stdout, 'percentile', float(args.percentile),
+        ret = t.output(sys.stdout, 'percentile', float(args.percentile),
                  print_header=args.with_header)
     elif args.calc == 'avg':
-        t.output(sys.stdout, 'avg', print_header=args.with_header)
+        ret = t.output(sys.stdout, 'avg', print_header=args.with_header)
     else:
-        t.output(sys.stdout, 'sum', print_header=args.with_header)
+        ret = t.output(sys.stdout, 'sum', print_header=args.with_header)
+
+    if ret:
+        sys.exit(0)
+    else:
+        # Malformed or empty input
+        sys.exit(1)
 
 
 if __name__ == '__main__':
