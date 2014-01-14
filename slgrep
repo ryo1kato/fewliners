@@ -1,0 +1,78 @@
+#!/bin/bash
+#
+# A grep for multiline log records - (not so) simple wrapper for
+# awk with setting IFS/RS/ORS automatically
+#
+
+# NOTE: we should use '\n' instead of ^ or $ to
+# indicate beginning or ending of lines (fields)
+# maybe automatically replacing ^s and $s with '\n' nice?
+print_help () {
+cat <<EOF
+Usage: $0 [--or|--and] PATTERNS... [--] [FILES...]
+  grep like tool to search multi-line log entries separated by '-----------'.
+  In reality, just an awk wrapper with RS='\\n-----------\\n' and IFS='\\n'
+  If last argument is existing file, assume it's input. If file name is
+  *.gz, *.bz2 or *.xz, uncompress it on-the-fly before read it.
+
+EOF
+}
+
+set -eu
+
+IFS='\n'
+RS='\n----------------*\n'
+ORS='\n----------------\n'
+
+
+logical_AND=no
+
+if [ $# -lt 1 ]; then
+    print_help
+    exit 1
+fi
+
+case $1 in
+    -o|--or) shift;;
+    -a|--and) shift; logical_AND=yes;;
+    -h|--help) print_help; exit 0;;
+    -*) print_help; exit 1;;
+    --) shift;;
+    *) : ;;
+esac
+
+
+awkcond='' # AND logic
+awkpat=''  # OR logic
+while [ $# -ge 1 ]
+do
+    pattern="$1"
+    [ -e "$pattern" ] && break
+    case "$pattern" in
+        -)  break;;
+        --) shift; break;;
+    esac
+    awkcond="${awkcond}${awkcond:+ && }\$0 ~ /$pattern/"
+    awkpat="${awkpat}${awkpat:+|}$pattern"
+    shift
+done
+
+if [ "$logical_AND" = yes ]
+then
+    awkstatement="{if (${awkcond}) print \$0}"
+else
+    awkstatement="/$awkpat/{print \$0}"
+fi
+
+# read from stdin if no file argument is given
+[ $# -eq 0 ] && set -- "-"
+
+for file in "$@"
+do
+    case "$file" in
+        *.gz)  zcat "$file";;
+        *.bz2) bzcat "$file";;
+        *.xz)  xzcat "$file";;
+        *)     cat "$file";;
+    esac | awk -F "$IFS" -v RS="$RS" -v ORS="$ORS" "$awkstatement"
+done
