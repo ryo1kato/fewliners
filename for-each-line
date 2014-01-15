@@ -1,2 +1,21 @@
 #!/bin/bash
+#
+#    for-each-line - A tiny xargs wrapper / poor-man's GNU parallel
+#
+# EXAMPLE
+#   for-each-line "ssh {} grep $keyword /var/log/syslog" < host-list.txt
+#
+# Read each lines from standard input, and execute command
+# given as argument with '{}' of command line with
+# those input and execute commands.
+#
+# HINT
+#   You can use '-P' option to run jobs parallelly.
+#   e.g.
+#       for-each-line -P 8 "ssh {} $remote_commands" < host-list.txt
+#   will be similar to
+#       parallel -P 8 "ssh {} $remote_commands" < host-list.txt
+#   Although order of output is not guaranteed for for-each-line,
+#
+
 xargs -d'\n' -I{} -n1 "$@"
