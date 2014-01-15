@@ -1,12 +1,14 @@
 #!/bin/bash
 #
+#   amlgrep - Awk Multi-line Log grep
+#
 # A grep for multiline log records - (not so) simple wrapper for
 # awk with setting IFS/RS/ORS automatically
 #
-
-# NOTE: we should use '\n' instead of ^ or $ to
-# indicate beginning or ending of lines (fields)
-# maybe automatically replacing ^s and $s with '\n' nice?
+# NOTE: You should use '\n' instead of ^ or $ to
+# indicate beginnings and endings of lines (fields)
+# (TODO: automatically replacing '^' and '$' with '\n' would be nice?)
+#
 print_help () {
 cat <<EOF
 Usage: $0 [--or|--and] PATTERNS... [--] [FILES...]
