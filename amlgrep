@@ -11,62 +11,89 @@
 #
 print_help () {
 cat <<EOF
-Usage: $0 [--or|--and] PATTERNS... [--] [FILES...]
+Usage: $0 [--or|--and] [--] PATTERNS... [--] [FILES...]
   grep like tool to search multi-line log entries separated by '-----------'.
   In reality, just an awk wrapper with RS='\\n-----------\\n' and IFS='\\n'
-  If last argument is existing file, assume it's input. If file name is
-  *.gz, *.bz2 or *.xz, uncompress it on-the-fly before read it.
-
+  If an argument is an existing file or '-' (means standard input) or '--',
+  the argument and everything after that will be treated as filenames to read
+  from. (If you just want to search literal '-' or '--', use '[-]' or '-{2}')
+  If file name is *.gz, *.bz2 or *.xz, uncompress it on-the-fly before
+  reading from it.
+OPTIONS
+  -o,--or   Print entries match with any of PATTERNS. This is the default.
+  -a,--and  Print entries match with all of PATTERNS.
+  -v,--invert-match Select non-matching lines.
+  -h,--help Print this help.
 EOF
 }
 
 set -eu
 
+
+opt_conjunction="OR"
+opt_invert="no"
+opt_RS='\n----------------*\n'
+opt_ORS='\n----------------\n'
+while [ $# -ge 1 ]
+do
+case $1 in
+    -[^-][^-]*)
+        firstarg="$1"; shift
+        set -- ${firstarg:0:2} -${firstarg:2} "$@"; continue;;
+    --*=*)
+        firstarg="$1"; shift;
+        set -- ${firstarg%%=*} ${firstarg#*=} "$@"; continue;;
+    #------------------------------------------
+    -o|--or)  opt_conjunction="OR";;
+    -a|--and) opt_conjunction="AND";;
+    -v|--invert|--invert-match) opt_invert=yes;;
+    -r|--rs|--record-separator) opt_RS="$2"; shift;;
+    --ors|--output-record-separator) opt_ORS="$2"; shift;;
+    #------------------------------------------
+    -h|--help) print_help; exit 0;;
+    --) shift; break;;
+    -*) echo "ERROR: Unknown option: $1">&2; exit 1;;
+    *) break ;;
+esac
+shift
+done
+
+[ "$opt_invert" = yes ] && opt_conjunction="N${opt_conjunction}"
 IFS='\n'
-RS='\n----------------*\n'
-ORS='\n----------------\n'
+RS="$opt_RS"
+ORS="$opt_ORS"
 
-
-logical_AND=no
 
 if [ $# -lt 1 ]; then
     print_help
     exit 1
 fi
 
-case $1 in
-    -o|--or) shift;;
-    -a|--and) shift; logical_AND=yes;;
-    -h|--help) print_help; exit 0;;
-    -*) print_help; exit 1;;
-    --) shift;;
-    *) : ;;
-esac
-
-
-awkcond='' # AND logic
-awkpat=''  # OR logic
+awkpat="$1"  # OR logic
+awkcond="\$0 ~ /$1/" # AND logic
+shift
 while [ $# -ge 1 ]
 do
     pattern="$1"
     [ -e "$pattern" ] && break
     case "$pattern" in
-        -)  break;;
+        -)  break;; # stdin
         --) shift; break;;
     esac
-    awkcond="${awkcond}${awkcond:+ && }\$0 ~ /$pattern/"
-    awkpat="${awkpat}${awkpat:+|}$pattern"
-    shift
-done
+    awkpat="${awkpat}|$pattern"
+    awkcond="${awkcond} && \$0 ~ /$pattern/"
+shift; done
 
-if [ "$logical_AND" = yes ]
-then
-    awkstatement="{if (${awkcond}) print \$0}"
-else
-    awkstatement="/$awkpat/{print \$0}"
-fi
+case $opt_conjunction in
+    OR)    awkstatement="       /$awkpat/{print \$0}";;
+    NOR)   awkstatement="\$0 !~ /$awkpat/{print \$0}";;
+    AND)   awkstatement="{if (${awkcond}) print \$0}";;
+    NAND)  awkstatement="{if (!(${awkcond})) print \$0}";;
+esac
 
-# read from stdin if no file argument is given
+echo "$awkstatement"
+
+# read from stdin ("-") if no file name is given
 [ $# -eq 0 ] && set -- "-"
 
 for file in "$@"
