@@ -20,18 +20,72 @@ Usage: $0 [--or|--and] [--] PATTERNS... [--] [FILES...]
   If file name is *.gz, *.bz2 or *.xz, uncompress it on-the-fly before
   reading from it.
 OPTIONS
-  -o,--or   Print entries match with any of PATTERNS. This is the default.
-  -a,--and  Print entries match with all of PATTERNS.
-  -v,--invert-match Select non-matching lines.
-  -h,--help Print this help.
+  -h, --help  Print this help.
+  -o, --or    Print entries match with any of PATTERNS. This is the default.
+  -a, --and   Print entries match with all of PATTERNS.
+  -c, --count Print number of matches.
+  --color
+  -m, --mono  Highlight or do not matches. Default is to highlight matches if
+              standard out is a terminal.
+  -v, --invert-match
+        Select non-matching lines.
+  -r, --rs, --record-separator
+        Set input record separater. Default is "$opt_RS"
+  --ors, --output-record-separator
+        Set output record separater. Default is "$opt_ORS"
 EOF
 }
 
 set -eu
 
 
-opt_conjunction="OR"
-opt_invert="no"
+#################################################################
+##
+## Detect awk type
+##
+## the original awk and nawk doesn't allow regex or '\n' in RS
+## So need to auto-detect type of awk available and adjust RS
+##
+
+if type gawk > /dev/null 2>&1
+then
+    awk='gawk'
+    awk_type='gawk'
+elif type awk > /dev/null 2>&1
+then
+    if awk --version | grep -q 'GNU'
+    then
+        awk='awk'
+        awk_type='gawk'
+    else
+        # Maybe you comment out 'exit 1',
+        # uncomment the lower two lines and case statement below
+        # to use nawk or original awk -- but not sure if it's
+        # fully compatible.
+        echo "$0: ERROR: GNU version of awk is required"
+        exit 1
+        #awk='awk'
+        #awk_type='awk'
+    fi
+else
+    echo "$0: ERROR: awk is not found (missing \$PATH ?)"
+    exit 1
+fi
+
+#case $awk_type in
+#    gawk) opt_RS='\n----------------*\n';;
+#    *)    opt_RS='-----------------';;
+#esac
+
+
+#################################################################
+##
+## cmdline option parser
+##
+opt_conjunction='OR'
+opt_invert='no'
+opt_count='no'
+opt_color='auto'
 opt_RS='\n----------------*\n'
 opt_ORS='\n----------------\n'
 while [ $# -ge 1 ]
@@ -44,11 +98,14 @@ case $1 in
         firstarg="$1"; shift;
         set -- ${firstarg%%=*} ${firstarg#*=} "$@"; continue;;
     #------------------------------------------
-    -o|--or)  opt_conjunction="OR";;
-    -a|--and) opt_conjunction="AND";;
-    -v|--invert|--invert-match) opt_invert=yes;;
+    -o|--or)  opt_conjunction='OR';;
+    -a|--and) opt_conjunction='AND';;
+    -v|--invert|--invert-match) opt_invert='yes';;
     -r|--rs|--record-separator) opt_RS="$2"; shift;;
     --ors|--output-record-separator) opt_ORS="$2"; shift;;
+    -c|--count) opt_count='yes';;
+    --color) opt_color='always';;
+    --mono) opt_color='never';;
     #------------------------------------------
     -h|--help) print_help; exit 0;;
     --) shift; break;;
@@ -62,13 +119,25 @@ done
 IFS='\n'
 RS="$opt_RS"
 ORS="$opt_ORS"
-
+awkargs=(-F "$IFS" -v RS="$RS" -v ORS="$ORS")
 
 if [ $# -lt 1 ]; then
     print_help
     exit 1
 fi
 
+if [ "$opt_color" = 'always' -o "$opt_color" = 'auto' -a -t 1 ]
+then
+    highlight="yes"
+else
+    highlight="no"
+fi
+
+
+#################################################################
+##
+## Build an AWK script
+##
 awkpat="$1"  # OR logic
 awkcond="\$0 ~ /$1/" # AND logic
 shift
@@ -84,14 +153,37 @@ do
     awkcond="${awkcond} && \$0 ~ /$pattern/"
 shift; done
 
+
+if [ "$opt_count" = 'yes' ]
+then
+    awkprint=''
+elif [ "$highlight" = 'yes' ]
+then
+    awkprint="gsub(/$awkpat/, \"$(tput rev)&$(tput sgr0)\");print"
+else
+    awkprint='print'
+fi
+
+
 case $opt_conjunction in
-    OR)    awkstatement="       /$awkpat/{print \$0}";;
-    NOR)   awkstatement="\$0 !~ /$awkpat/{print \$0}";;
-    AND)   awkstatement="{if (${awkcond}) print \$0}";;
-    NAND)  awkstatement="{if (!(${awkcond})) print \$0}";;
+    OR)   awkstatement="       /$awkpat/   {i++;$awkprint}";;
+    NOR)  awkstatement="\$0 !~ /$awkpat/   {i++;$awkprint}";;
+    AND)  awkstatement="{if   (${awkcond}) {i++;$awkprint}}";;
+    NAND) awkstatement="{if (!(${awkcond})){i++;$awkprint}}";;
 esac
 
-echo "$awkstatement"
+awkexit='if (i>0){exit 0}else{exit 1}'
+if [ "$opt_count" = 'yes' ]
+then
+    awkstatement="$awkstatement END{printf \"%d\n\", i; $awkexit}"
+else
+    awkstatement="$awkstatement END{$awkexit}"
+fi
+
+#################################################################
+##
+## Run
+##
 
 # read from stdin ("-") if no file name is given
 [ $# -eq 0 ] && set -- "-"
@@ -99,9 +191,9 @@ echo "$awkstatement"
 for file in "$@"
 do
     case "$file" in
-        *.gz)  zcat "$file";;
+        *.gz)  gunzip -c "$file";;
         *.bz2) bzcat "$file";;
         *.xz)  xzcat "$file";;
         *)     cat "$file";;
-    esac | awk -F "$IFS" -v RS="$RS" -v ORS="$ORS" "$awkstatement"
+    esac | $awk "${awkargs[@]}" "$awkstatement"
 done
