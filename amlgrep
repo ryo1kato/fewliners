@@ -51,9 +51,13 @@ if type gawk > /dev/null 2>&1
 then
     awk='gawk'
     awk_type='gawk'
+elif type mawk > /dev/null 2>&1
+then
+    awk='mawk'
+    awk_type='mawk'
 elif type awk > /dev/null 2>&1
 then
-    if awk --version | grep -q 'GNU'
+    if awk --version 2>/dev/null | grep -q 'GNU'
     then
         awk='awk'
         awk_type='gawk'
@@ -62,7 +66,7 @@ then
         # uncomment the lower two lines and case statement below
         # to use nawk or original awk -- but not sure if it's
         # fully compatible.
-        echo "$0: ERROR: GNU version of awk is required"
+        echo "$0: ERROR: mawk or gawk is required"
         exit 1
         #awk='awk'
         #awk_type='awk'
