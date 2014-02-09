@@ -3,16 +3,19 @@
 # a lazy guy's wrapper for apt commands
 
 case $1 in
+    # short-cuts
+    s)    shift; set -x; apt-cache search "$@";;
+    i)    shift; set -x; apt-get install "$@";;
+    u)    shift; set -x; apt-get update "$@";;
+    dep)  shift; set -x; apt-cache depends "$@";;
+    rdep) shift; set -x; apt-cache rdepends "$@";;
+    # apt-cache
     showpkg|showsrc|stats|search|show|depends|rdepends|pkgnames)
         set -x
         apt-cache "$@"
         ;;
-    # short-cuts
-    se|srch) shift; set -x; apt-cache search "$@";;
-    dep)     shift; set -x; apt-cache depends "$@";;
-    rdep)    shift; set -x; apt-cache rdepends "$@";;
-
-    update|upgrade|install|remove|source|check|autoclean|autoremove|uninstall)
+    # apt-get
+    update|upgrade|install|remove|purge|source|check|download|clean|autoclean|autoremove|uninstall)
         set -x
         sudo apt-get "$@"
         ;;
