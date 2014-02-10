@@ -1,0 +1,45 @@
+#!/bin/bash
+#
+# zcat equivalent of pv
+#
+
+DEBUG () { : echo "$@" >&2; }
+
+set -ue
+opts=()
+while [ $# -gt 0 ]
+do
+    case $1 in
+        -*) opts+=("$1");;
+        --) shift; break;;
+         *) break;;
+    esac
+shift
+done
+
+total_size=0
+for file in "$@"
+do
+    case "$file" in
+    *.gz) file_size=$(gzip -l "$file" | tail -n 1  | awk '{print $2}');;
+    *)    file_size=$(stat -c %s "$file")
+    esac
+    DEBUG "$file: $file_size"
+    total_size=$(( total_size + file_size ))
+done
+DEBUG "total_size=$total_size"
+
+for file in "$@"
+do
+    case $file in
+    *.gz) gzip --decompress --stdout "$file";;
+    *)    cat "$file";;
+    esac
+done | {
+    if [ ${#opts[@]} -eq 0 ]
+    then
+        pv --size=$total_size
+    else
+        pv "$opts" --size=$total_size
+    fi
+}

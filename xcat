@@ -1,0 +1,36 @@
+#!/bin/bash
+#
+# Simple wrapper for cat / zcat / bzcat / zxcat combined
+# NOTE: this script only guess compression type from filename extension.
+#
+set -ue
+
+print_help () {
+    echo "Usage: $0 [FILE[.gz|.bz2|.xz|.lzma]...]"
+    echo
+    echo 'A cat / zcat / bzcat / zxcat wrapper.'
+    echo 'If a filename ends with one of .gz, .bz2, .xz, .lzma,'
+    echo 'the command assumes it is compressed and decompress to stdout.'
+    echo 'otherwise the command behaves similar to cat.'
+    echo '(NOTE: does not decompress data read from stdin)'
+}
+
+for file in "$@"
+do
+    if [ ! -r "$file" ]
+    then
+        echo "$0: ERROR: cannot read file: '$file'"
+        exit 1
+    fi
+done
+
+for file in "$@"
+do
+    case $file in
+        *.gz)    gzip  --decompress --stdout "$file";;
+        *.bz2)   bzip2 --decompress --stdout "$file";;
+        *.xz)    xz    --decompress --stdout "$file";;
+        *.lzma)  xz    --decompress --stdout --format=lzma "$file";;
+        *)       cat "$file";;
+    esac
+done
