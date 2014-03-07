@@ -5,10 +5,6 @@
 # A grep for multiline log records - (not so) simple wrapper for
 # awk with setting IFS/RS/ORS automatically
 #
-# NOTE: You should use '\n' instead of ^ or $ to
-# indicate beginnings and endings of lines (fields)
-# (TODO: automatically replacing '^' and '$' with '\n' would be nice?)
-#
 print_help () {
 cat <<EOF
 Usage: $0 [OPTIONS] [--] PATTERNS... [--] [FILES...]
@@ -157,12 +153,25 @@ fi
 ##
 ## Build an AWK script
 ##
-awkpat="$1"  # OR logic
-awkcond="\$0 ~ /$1/" # AND logic
+
+sanitize_pattern () {
+    local pattern="$1"
+    local slash=''
+    case $pattern in
+        '^'*) pattern="${pattern/^/\\n}"       ;;&  # fall-thru
+        *'\$') : it is escaped - ignore        ;;
+        *[^\\]'$') pattern="${pattern/\$/\\n}" ;;
+    esac
+    echo "${pattern//\//\/}"
+}
+
+first_pattern="$(sanitize_pattern "$1")"
+awkpat="$first_pattern"  # OR logic
+awkcond="\$0 ~ /$first_pattern/" # AND logic
 shift
 while [ $# -ge 1 ]
 do
-    pattern="$1"
+    pattern="$(sanitize_pattern "$1")"
     [ -e "$pattern" ] && break
     case "$pattern" in
         -)  break;; # stdin
