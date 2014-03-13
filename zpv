@@ -2,6 +2,9 @@
 #
 # zcat equivalent of pv
 #
+# TODO: xz commant support using -l option.
+#       (NOTE: bzip2 doesn't have -l option)
+#
 
 DEBUG () { : echo "$@" >&2; }
 

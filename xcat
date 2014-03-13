@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Simple wrapper for cat / zcat / bzcat / zxcat combined
+# Simple wrapper for cat / zcat / bzcat / zxcat combined.
 # NOTE: this script only guess compression type from filename extension.
 #
 set -ue
@@ -17,6 +17,12 @@ print_help () {
 
 for file in "$@"
 do
+    case $file in
+        -h|--help)
+            print_help
+            exit 0
+            ;;
+    esac
     if [ ! -r "$file" ]
     then
         echo "$0: ERROR: cannot read file: '$file'"
