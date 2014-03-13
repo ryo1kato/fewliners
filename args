@@ -6,13 +6,17 @@
 #
 set -ue
 trap 'echo "$0: Unexpected error at line $LINENO" >&2; exit 1;' ERR
+shopt -s extglob
 
 DIE () {
     echo "$0: ERROR: $*"
     exit 1
 }
 
+# easer to handle in form of ${param//$newline}
+# because we don't have to escape (back)slashes
 newline=$'\n'
+slash=$'/'
 
 print_help () {
 cat <<EOF
@@ -25,24 +29,24 @@ Usage: $0 [OPTIONS] [--] {PID|ARGS[...]}
   By default long line will be shoten to make it fit in one line.
   You can suppress that behavior by '-f' option
 OPTIONS
-  -p, --pid    Force interpretation of
-  -c, --color  Print args with background color to see trailing whitespaces.
-               Default is ENABLED if stdout is a terminal.
-  -m, --mono   Don't use color even for terminal output.
-  -e, --escape Convert newlines to literal '\\n'.
-               With --color option, it also change color.
-  -n, --number Print line number
-  -h, --help   Print this help
-  -f, --full   Don't omit long (by default, cut by \$COLUMNS chars)
+  -c,--color       Print args with background color.
+                   Default is ENABLED if stdout is a terminal.
+  -m,--mono        Don't use color even for terminal output.
+  -P,--no-foldpath Don't insert newline with long paths connected with ':'
+  -E,--no-escape   Do not convert newlines to literal '\\n'.
+  -n,--number      Print line number
+  -f,--full        Don't abbreviate long args (by default, cut to \$COLUMNS chars)
+  -h,--help        Print this help
 EOF
 }
 
 recursive_opts=()
 opt_full=no
+opt_fold=yes
 opt_lineno=no
 opt_pid=no
 opt_color=no
-opt_escape=no
+opt_escape=yes
 
 default_cols=80
 mid_omit_minimum=60
@@ -75,10 +79,6 @@ cstart=''
 cend=''
 cesc=''
 
-count_newline () {
-    nl="${hoge//[^$newline]/}"
-    echo ${#nl}
-}
 
 output () {
     local opt_strict=no
@@ -100,9 +100,8 @@ output () {
     # adjust width by number of newlines if we escape them
     # if we only have start, cut the begening.
     # if we have range (start and end), cut the tail.
-    newlines="${fragment//[^$newline]/}"
-    nr_newlines=${#newlines}
-    if [ "$opt_escape" = yes ]; then
+    if [[ $opt_escape = yes && $fragment =~ $newline ]]; then
+        nr_newlines=$(echo "$fragment" | wc -l)
         case $# in
             2) ((start = $2 + nr_newlines));;
             3) ((end = $3 - nr_newlines));;
@@ -111,8 +110,8 @@ output () {
 
     output="${str:start:end}"
 
-    if [ "$opt_strict" = yes -a ${#output} -ne ${#arg} ]; then
-        # it's too long even before escaping newlines
+    if [ "$opt_strict" = yes -a ${#output} -ne ${#str} ]; then
+        # Check the same thing again, after escaping.
         return 1
     fi
 
@@ -123,14 +122,29 @@ output () {
     echo -n "$cstart$output$cend"
 }
 
-cols=$(tput cols || echo $default_cols) >/dev/null 2>&1
+esc_space=
+esc_esc=
+
+# chars usually we use for filename.
+# Even exclude punctuations although it's regitimate to use for filenames.
+fname_chars='A-Za-z0-9._@-'
+
 shorten () {
-    local offset="$1" # adjust line length with -n option etc.
-    local lineno="$2" # alternating color
+    local width="$1" # adjust line length with -n option etc.
+    local lineno="$2" # used for alternating color
     local str="$3"
     dots="..."
-    (( width = cols - $offset ))
-    if (( ${#str} > width && cols > mid_omit_minimum + ${#dots} + tail_keep))
+
+    if [[ $opt_fold == yes && $str =~ .*/.*/.*:.*/.*/.* ]]
+    then
+        opt_fold=no shorten $width $lineno "${str%%:*}"
+        local str_rest="${str#*:}:"
+        while (( ${#str_rest} > 0 ))
+        do
+            opt_fold=no shorten $width $lineno ":${str_rest%%:*}"
+            str_rest=${str_rest#*:}
+        done
+    elif (( ${#str} > width && cols > mid_omit_minimum + ${#dots} + tail_keep))
     then
         (( mid_omit_start = width - ${#dots} - tail_keep))
         (( tailstart = ${#str} - tail_keep ))
@@ -172,7 +186,7 @@ print_args () {
             output "${cstart}${arg}${cend}"
             printf '\n'
         else
-            shorten $offset $i "$arg"
+            shorten $((cols - offset)) $i "$arg"
         fi
         (( i++ ))
     done
@@ -180,18 +194,21 @@ print_args () {
 
 #############################################################################
 
+cols=$(tput cols || echo $default_cols) >/dev/null 2>&1
 [ -t 1 ] && opt_color=yes
 
 while [ $# -gt 0 ]
 do
     case $1 in
-    -h|--help)   print_help; exit 0;;
-    -p|--pid)    opt_pid=yes;;
-    -f|--full)   opt_full=yes;   recursive_opts+=("$1");;
-    -n|--number) opt_lineno=yes; recursive_opts+=("$1");;
-    -m|--mono)   opt_color=no;   recursive_opts+=("$1");;
-    -c|--color)  opt_color=yes;  recursive_opts+=("$1");;
-    -e|--escape) opt_escape=yes; recursive_opts+=("$1");;
+    -h|--help)        print_help; exit 0;;
+    -f|--full)        opt_full=yes;    recursive_opts+=("$1");;
+    -p|--foldpath)    opt_fold=yes;    recursive_opts+=("$1");;
+    -P|--no-foldpath) opt_fold=no;     recursive_opts+=("$1");;
+    -n|--number)      opt_lineno=yes;  recursive_opts+=("$1");;
+    -m|--mono)        opt_color=no;    recursive_opts+=("$1");;
+    -c|--color)       opt_color=yes;   recursive_opts+=("$1");;
+    -e|--escape)      opt_escape=yes;  recursive_opts+=("$1");;
+    -E|--no-escape)   opt_escape=no;   recursive_opts+=("$1");;
     --) shift; break;;
     *) break;;
     esac
@@ -199,10 +216,6 @@ do
 done
 
 [ $# -eq 1 ] && [[ $1 =~ [0-9]+ ]] && opt_pid=yes
-if [ "$opt_pid" = yes -a $# -ne 1 ]
-then
-    DIE "-p/--pid option takes only one argument"
-fi
 
 # Need this to prevent expansion error caused by set -u
 recursive_opts+=('--')
