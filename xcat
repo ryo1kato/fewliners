@@ -23,20 +23,25 @@ do
             exit 0
             ;;
     esac
-    if [ ! -r "$file" ]
+    if [ "$file" != '-' -a ! -r "$file" ]
     then
         echo "$0: ERROR: cannot read file: '$file'"
         exit 1
     fi
 done
 
-for file in "$@"
-do
-    case $file in
-        *.gz)    gzip  --decompress --stdout "$file";;
-        *.bz2)   bzip2 --decompress --stdout "$file";;
-        *.xz)    xz    --decompress --stdout "$file";;
-        *.lzma)  xz    --decompress --stdout --format=lzma "$file";;
-        *)       cat "$file";;
-    esac
-done
+if [ $# -eq 0 ]
+then
+    cat
+else
+    for file in "$@"
+    do
+        case $file in
+            *.gz)    gzip  --decompress --stdout "$file";;
+            *.bz2)   bzip2 --decompress --stdout "$file";;
+            *.xz)    xz    --decompress --stdout "$file";;
+            *.lzma)  xz    --decompress --stdout --format=lzma "$file";;
+            *)       cat "$file";;
+        esac
+    done
+fi
