@@ -15,7 +15,12 @@ do
     case $1 in
         -*) opts+=("$1");;
         --) shift; break;;
-         *) break;;
+         *) if [ -r "$1" ]
+            then
+                break
+            else
+                opts+=("$1")
+            fi;;
     esac
 shift
 done
@@ -43,6 +48,6 @@ done | {
     then
         pv --size=$total_size
     else
-        pv "$opts" --size=$total_size
+        pv "${opts[@]}" --size=$total_size
     fi
 }
