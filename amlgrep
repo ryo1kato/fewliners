@@ -158,7 +158,9 @@ sanitize_pattern () {
     local pattern="$1"
     local slash=''
     case $pattern in
-        '^'*) pattern="${pattern/^/\\n}"       ;;&  # fall-thru
+        '^'*) pattern="${pattern/^/\\n}"       ;;
+    esac
+    case $pattern in
         *'\$') : it is escaped - ignore        ;;
         *[^\\]'$') pattern="${pattern/\$/\\n}" ;;
     esac
