@@ -8,11 +8,13 @@ Usage: $0 [OPTIONS] [FILE]
   like tee(1), but output number of lines while saving to file.
   This is intended to be used, like pv[1] command, but for text file
   (like compiler output, log files or any line oriented data) to check
-  progress of data flows in pipes.
+  realtime data flows in pipes.
+
+  If stdout is not a terminal, this command behaves just like tee(1).
 
 OPTIONS
     -h,--help             Show this help
-    -a,--append           Append to file (Default)
+    -a,--append           Append to file
     -o,--overwrite        Overwrite existing file
     -e,--error            Count lines with /error/i
     -w,--warn             Count lines with /warn/i
@@ -31,10 +33,11 @@ DIE () { echo "ERROR: $@" >&2; exit 1; }
 lastupdate=0
 
 shopt -s nocasematch
-tee_opts='-a'
+tee_opt='--'
 tee_file="no"
 opt_error="no"
 opt_warn="no"
+opt_overwrite="no"
 opt_keyword=""
 
 while [ $# -ge 1 ]
@@ -47,11 +50,12 @@ case $1 in
     --*=*)
         firstarg="$1"; shift;
         set -- ${firstarg%%=*} ${firstarg#*=} "$@"; continue;;
-    -h|--help)   print_help; exit 0;;
-    -o|--overwrite)  tee_opts="";;
-    -e|--error)   opt_error=yes;;
-    -w|--warn)    opt_warn=yes;;
-    -k|--keyword) opt_keyword="$1"; shift;;
+    -a|--apend)     opt_overwrite='no'; tee_opt='-a';;
+    -h|--help)      print_help; exit 0;;
+    -o|--overwrite) opt_overwrite='yes'; tee_opt='--';;
+    -e|--error)     opt_error='yes';;
+    -w|--warn)      opt_warn='yes';;
+    -k|--keyword)   opt_keyword="$2"; shift;;
     -c|--case-sensitive) shopt -u nocasematch;;
     --) break;;
     -*) DIE "Unknown option '$1'";;
@@ -71,31 +75,47 @@ inc () {
     let "${1}++" || true
 }
 
+fancytee () {
+    while read line
+    do
+        inc nr_line
+        [[ "$opt_error" = yes    && $line =~ ERROR ]] && inc nr_error
+        [[ "$opt_warn" = yes     && $line =~ WARN ]] && inc nr_warn
+        [[ -n "$opt_keyword"  && $line =~ $opt_keyword ]] && inc nr_keyward
+
+        if [ $SECONDS -ne $lastupdate ]; then
+            echo -n "$nr_line lines"
+            if [ "$opt_error" = yes ]; then
+                echo -n ", $nr_error errors"
+            fi
+            if [ "$opt_warn" = yes ]; then
+                echo -n ", $nr_warn warns"
+            fi
+            if [ -n "$opt_keyword" ]; then
+                echo -n ", $nr_warn keyword matches"
+            fi
+            echo
+            lastupdate=$SECONDS
+        fi
+    done
+}
+
+
+
 if [ $# -eq 1 ]; then
     file="$1"
+    if [[ $tee_opt != -a && $opt_overwrite != yes && -e $file ]]
+    then
+        DIE "$file exists. (-o to overwrite, -a to append)"
+    fi
 else
     file='/dev/null'
 fi
 
-tee "${tee_opts[@]}" "$file" | while read line
-do
-    inc nr_line
-    [[ "$opt_error" = yes    && $line =~ ERROR ]] && inc nr_error
-    [[ "$opt_warn" = yes     && $line =~ WARN ]] && inc nr_warn
-    [[ -n "$opt_keyword"  && $line =~ $opt_keyword ]] && inc nr_keyward
 
-    if [ $SECONDS -ne $lastupdate ]; then
-        echo -n "$nr_line lines"
-        if [ "$opt_error" = yes ]; then
-            echo -n ", $nr_error errors"
-        fi
-        if [ "$opt_warn" = yes ]; then
-            echo -n ", $nr_warn warns"
-        fi
-        if [ -n "$opt_keyword" ]; then
-            echo -n ", $nr_warn keyword matches"
-        fi
-        echo
-        lastupdate=$SECONDS
-    fi
-done
+if [ -t 1 ]
+then
+    tee "$tee_opt" "$file" | fancytee
+else
+    tee "$tee_opt" "$file"
+fi
