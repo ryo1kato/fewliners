@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -u
+set -ue
 
 print_help () {
 cat <<EOF
@@ -11,7 +11,6 @@ Usage: $0 [OPTIONS] [FILE]
   realtime data flows in pipes.
 
   If stdout is not a terminal, this command behaves just like tee(1).
-
 OPTIONS
     -h,--help             Show this help
     -a,--append           Append to file
@@ -21,8 +20,11 @@ OPTIONS
     -k,--keyword=REGEX    Count lines with /keyword/i
     -c,--case-sensitive   Make the pattern case-sensitive
                           (use all upper cases for -e and -w)
+    -t,--time             Show time elapsed.
+BUGS
+  This command is too slow to process output of grep from filesystem.
 SEE ALSO
-    [1] pv http://www.ivarch.com/programs/pv.shtml
+  [1] pv http://www.ivarch.com/programs/pv.shtml
 EOF
 }
 
@@ -30,16 +32,23 @@ EOF
 
 DIE () { echo "ERROR: $@" >&2; exit 1; }
 
-lastupdate=0
+pretty_sec () {
+    local seconds=$1
+    local min sec
+    ((min = seconds / 60)) || true
+    ((sec = seconds % 60)) || true
+    echo "${min}m ${sec}s"
+}
+
 
 shopt -s nocasematch
 tee_opt='--'
-tee_file="no"
-opt_error="no"
-opt_warn="no"
-opt_overwrite="no"
-opt_keyword=""
-
+tee_file='no'
+opt_error='no'
+opt_warn='no'
+opt_overwrite='no'
+opt_keyword=''
+opt_showtime='no'
 while [ $# -ge 1 ]
 do
 case $1 in
@@ -56,6 +65,7 @@ case $1 in
     -e|--error)     opt_error='yes';;
     -w|--warn)      opt_warn='yes';;
     -k|--keyword)   opt_keyword="$2"; shift;;
+    -t|--time)      opt_showtime='yes';;
     -c|--case-sensitive) shopt -u nocasematch;;
     --) break;;
     -*) DIE "Unknown option '$1'";;
@@ -66,16 +76,20 @@ done
 
 
 ###############################################################################
-nr_line=0
-nr_error=0
-nr_warn=0
-nr_keyword=0
 
 inc () {
     let "${1}++" || true
 }
 
 fancytee () {
+    local start_time=$SECONDS
+    local nr_line=0
+    local nr_error=0
+    local nr_warn=0
+    local nr_keyword=0
+    local lastupdate=0
+    local status=''
+
     while read line
     do
         inc nr_line
@@ -84,22 +98,25 @@ fancytee () {
         [[ -n "$opt_keyword"  && $line =~ $opt_keyword ]] && inc nr_keyword
 
         if [ $SECONDS -ne $lastupdate ]; then
-            echo -n "$nr_line lines"
-            if [ "$opt_error" = yes ]; then
-                echo -n ", $nr_error errors"
-            fi
-            if [ "$opt_warn" = yes ]; then
-                echo -n ", $nr_warn warns"
-            fi
-            if [ -n "$opt_keyword" ]; then
-                echo -n ", $nr_keyword keyword matches"
-            fi
-            echo
+            # clear the previous status line with same length of whitespaces
+            printf "\r${status//?/ }\r"
+
+            status="$nr_line lines"
+            [ "$opt_error" = yes ] &&
+                status="$status, $nr_error errors"
+            [ "$opt_warn" = yes ] &&
+                status="$status, $nr_warn warns"
+            [ -n "$opt_keyword" ] &&
+                status="$status, $nr_keyword matches for /$opt_keyword/"
+            [ "$opt_showtime" = yes ] &&
+                status="$status, in $(pretty_sec $((SECONDS - start_time)) )"
+            echo -n "$status"
             lastupdate=$SECONDS
         fi
-    done
+    done >&2
+    end_time=$SECONDS
+    echo >&2
 }
-
 
 
 if [ $# -eq 1 ]; then
