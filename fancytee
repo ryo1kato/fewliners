@@ -69,7 +69,7 @@ done
 nr_line=0
 nr_error=0
 nr_warn=0
-nr_keyward=0
+nr_keyword=0
 
 inc () {
     let "${1}++" || true
@@ -79,9 +79,9 @@ fancytee () {
     while read line
     do
         inc nr_line
-        [[ "$opt_error" = yes    && $line =~ ERROR ]] && inc nr_error
-        [[ "$opt_warn" = yes     && $line =~ WARN ]] && inc nr_warn
-        [[ -n "$opt_keyword"  && $line =~ $opt_keyword ]] && inc nr_keyward
+        [[ "$opt_error" = yes && $line =~ ERROR ]] && inc nr_error
+        [[ "$opt_warn" = yes  && $line =~ WARN ]] && inc nr_warn
+        [[ -n "$opt_keyword"  && $line =~ $opt_keyword ]] && inc nr_keyword
 
         if [ $SECONDS -ne $lastupdate ]; then
             echo -n "$nr_line lines"
@@ -92,7 +92,7 @@ fancytee () {
                 echo -n ", $nr_warn warns"
             fi
             if [ -n "$opt_keyword" ]; then
-                echo -n ", $nr_warn keyword matches"
+                echo -n ", $nr_keyword keyword matches"
             fi
             echo
             lastupdate=$SECONDS
