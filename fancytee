@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -ue
+trap 'echo "$0: Unexpected error at line $LINENO" >&2; exit 1;' ERR
 
 print_help () {
 cat <<EOF
@@ -40,6 +41,7 @@ pretty_sec () {
     echo "${min}m ${sec}s"
 }
 
+fancytee_header=""
 
 shopt -s nocasematch
 tee_opt='--'
@@ -82,13 +84,14 @@ inc () {
 }
 
 fancytee () {
+    [ $# -ge 1 ] && local header="$1"
     local start_time=$SECONDS
     local nr_line=0
     local nr_error=0
     local nr_warn=0
     local nr_keyword=0
     local lastupdate=0
-    local status=''
+    local status
 
     while read line
     do
@@ -101,7 +104,10 @@ fancytee () {
             # clear the previous status line with same length of whitespaces
             printf "\r${status//?/ }\r"
 
-            status="$nr_line lines"
+            status=''
+            [ -n "$fancytee_header" ] &&
+                status="[$fancytee_header] "
+            status="${status}$nr_line lines"
             [ "$opt_error" = yes ] &&
                 status="$status, $nr_error errors"
             [ "$opt_warn" = yes ] &&
@@ -121,6 +127,7 @@ fancytee () {
 
 if [ $# -eq 1 ]; then
     file="$1"
+    fancytee_header="$file"
     if [[ $tee_opt != -a && $opt_overwrite != yes && -e $file ]]
     then
         DIE "$file exists. (-o to overwrite, -a to append)"
@@ -132,7 +139,7 @@ fi
 
 if [ -t 1 ]
 then
-    tee "$tee_opt" "$file" | fancytee
+    tee "$tee_opt" "$file" | fancytee "$file"
 else
     tee "$tee_opt" "$file"
 fi
