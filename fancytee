@@ -91,7 +91,7 @@ fancytee () {
     local nr_warn=0
     local nr_keyword=0
     local lastupdate=0
-    local status
+    local status=''
 
     while read line
     do
