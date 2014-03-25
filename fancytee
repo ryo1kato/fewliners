@@ -5,7 +5,8 @@ trap 'echo "$0: Unexpected error at line $LINENO" >&2; exit 1;' ERR
 
 print_help () {
 cat <<EOF
-Usage: $0 [OPTIONS] [FILE]
+Usage: COMMAND | $0 [OPTIONS] [FILE]
+       $0 [OPTIONS] -c COMMAND [FILE]
   like tee(1), but output number of lines while saving to file.
   This is intended to be used, like pv[1] command, but for text file
   (like compiler output, log files or any line oriented data) to check
@@ -13,17 +14,19 @@ Usage: $0 [OPTIONS] [FILE]
 
   If stdout is not a terminal, this command behaves just like tee(1).
 OPTIONS
+    -c,--command=COMMAND  Execute COMMAND and apply fancytee to output of it.
+                          Also checks exit status and return it as it is.
     -h,--help             Show this help
     -a,--append           Append to file
     -o,--overwrite        Overwrite existing file
     -e,--error            Count lines with /error/i
     -w,--warn             Count lines with /warn/i
     -k,--keyword=REGEX    Count lines with /keyword/i
-    -c,--case-sensitive   Make the pattern case-sensitive
-                          (use all upper cases for -e and -w)
+    -I,--case-sensitive   Make the pattern case-sensitive.
+                          (Uses all upper cases for -e and -w)
     -t,--time             Show time elapsed.
 BUGS
-  This command is too slow to process output of grep from filesystem.
+  This command is significantly slow compared to 'grep -c' or 'pv -l'.
 SEE ALSO
   [1] pv http://www.ivarch.com/programs/pv.shtml
 EOF
@@ -31,7 +34,7 @@ EOF
 
 ###############################################################################
 
-DIE () { echo "ERROR: $@" >&2; exit 1; }
+DIE () { echo "ERROR: $0: $@" >&2; exit 1; }
 
 pretty_sec () {
     local seconds=$1
@@ -46,6 +49,7 @@ fancytee_header=""
 shopt -s nocasematch
 tee_opt='--'
 tee_file='no'
+opt_command=''
 opt_error='no'
 opt_warn='no'
 opt_overwrite='no'
@@ -62,13 +66,14 @@ case $1 in
         firstarg="$1"; shift;
         set -- ${firstarg%%=*} ${firstarg#*=} "$@"; continue;;
     -a|--apend)     opt_overwrite='no'; tee_opt='-a';;
-    -h|--help)      print_help; exit 0;;
     -o|--overwrite) opt_overwrite='yes'; tee_opt='--';;
+    -c|--command)   opt_command="$2"; shift;;
     -e|--error)     opt_error='yes';;
     -w|--warn)      opt_warn='yes';;
     -k|--keyword)   opt_keyword="$2"; shift;;
     -t|--time)      opt_showtime='yes';;
-    -c|--case-sensitive) shopt -u nocasematch;;
+    -I|--case-sensitive) shopt -u nocasematch;;
+    -h|--help)      print_help; exit 0;;
     --) break;;
     -*) DIE "Unknown option '$1'";;
     *) break;;
@@ -83,6 +88,9 @@ inc () {
     let "${1}++" || true
 }
 
+regex_error='(^|[^A-Z0-9_-])ERROR([^A-Z0-9_-]|$)'
+regex_warn='(^|[^A-Z0-9_])WARN(ING)?([^A-Z0-9_-]|$)'
+
 fancytee () {
     [ $# -ge 1 ] && local header="$1"
     local start_time=$SECONDS
@@ -93,12 +101,14 @@ fancytee () {
     local lastupdate=0
     local status=''
 
-    while read line
+    while IFS='' read -r line
     do
         inc nr_line
-        [[ "$opt_error" = yes && $line =~ ERROR ]] && inc nr_error
-        [[ "$opt_warn" = yes  && $line =~ WARN ]] && inc nr_warn
-        [[ -n "$opt_keyword"  && $line =~ $opt_keyword ]] && inc nr_keyword
+        [[ $opt_error = yes && "$line" =~ $regex_error ]] &&
+            inc nr_error
+        [[ $opt_warn = yes  && $line =~ $regex_warn ]] &&
+            inc nr_warn
+        [[ -n $opt_keyword && $line =~ $opt_keyword ]] && inc nr_keyword
 
         if [ $SECONDS -ne $lastupdate ]; then
             # clear the previous status line with same length of whitespaces
@@ -136,10 +146,19 @@ else
     file='/dev/null'
 fi
 
+main () {
+    if [ -t 1 ]
+    then
+        tee "$tee_opt" "$file" | fancytee "$file"
+    else
+        tee "$tee_opt" "$file"
+    fi
+}
 
-if [ -t 1 ]
+if [ -n "$opt_command" ]
 then
-    tee "$tee_opt" "$file" | fancytee "$file"
+    bash -c "$opt_command" | main
+    exit ${PIPESTATUS[0]}
 else
-    tee "$tee_opt" "$file"
+    main
 fi
