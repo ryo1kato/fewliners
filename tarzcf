@@ -1,0 +1,26 @@
+#!/bin/bash
+set -ue
+
+DIE () { echo "$0: ERROR: $*" >&2; exit 1; }
+
+case $1 in
+    -h|--help)
+        echo "Usage: $0 DIRECTORY[...]"
+        echo "Wrapper for 'tar zvf DIRECTORY.tar.gz DIRECTORY'"
+        exit 0
+        ;;
+esac
+
+for d in "$@"
+do
+    [ -d "$d" ] || DIE "$d is not a directory"
+done
+
+
+for d in "$@"
+do
+    tgzfile="${d%/}.tar.gz"
+    echo -n "$tgzfile ... "
+    tar zcf "$tgzfile" "${d}"
+    echo "done."
+done
