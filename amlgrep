@@ -49,7 +49,6 @@ WARN () { echo "$0: WARNING: $*" >&2; }
 
 sanitize_pattern () {
     local pattern="$1"
-    local slash=''
     case $pattern in
         '^'*) pattern="${pattern/^/\\n}"       ;;
     esac
@@ -108,10 +107,10 @@ do
 case $1 in
     -[^-][^-]*)
         firstarg="$1"; shift
-        set -- ${firstarg:0:2} -${firstarg:2} "$@"; continue;;
+        set -- "${firstarg:0:2}" "-${firstarg:2}" "$@"; continue;;
     --*=*)
         firstarg="$1"; shift;
-        set -- ${firstarg%%=*} ${firstarg#*=} "$@"; continue;;
+        set -- "${firstarg%%=*}" "${firstarg#*=}" "$@"; continue;;
     #------------------------------------------
     -o|--or)  opt_conjunction='OR';;
     -a|--and) opt_conjunction='AND';;
@@ -145,7 +144,7 @@ fi
 
 [ "$opt_invert" = yes ] && opt_conjunction="N${opt_conjunction}"
 IFS='\n'
-RS=$(sanitize_pattern "$opt_RS")
+RS="$(sanitize_pattern "$opt_RS")"
 # gawk specific: re-interval
 awkargs=('-W' 're-interval' -F "$IFS" -v RS="$RS" -v ORS="$opt_ORS")
 
