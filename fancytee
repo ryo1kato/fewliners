@@ -21,7 +21,7 @@ OPTIONS
     -o,--overwrite        Overwrite existing file
     -e,--error            Count lines with /error/i
     -w,--warn             Count lines with /warn/i
-    -k,--keyword=REGEX    Count lines with /keyword/i
+    -k,--keyword=REGEX    Count lines with /REGEX/i
     -I,--case-sensitive   Make the pattern case-sensitive.
                           (Uses all upper cases for -e and -w)
     -t,--time             Show time elapsed.
@@ -91,6 +91,26 @@ inc () {
 regex_error='(^|[^A-Z0-9_-])ERROR([^A-Z0-9_-]|$)'
 regex_warn='(^|[^A-Z0-9_])WARN(ING)?([^A-Z0-9_-]|$)'
 
+
+print_status () {
+    # clear the previous status line with same length of whitespaces
+    printf "\r${status//?/ }\r"
+
+    status=''
+    [ -n "$fancytee_header" ] &&
+        status="[$fancytee_header] "
+    status="${status}$nr_line lines"
+    [ "$opt_error" = yes ] &&
+        status="$status, $nr_error errors"
+    [ "$opt_warn" = yes ] &&
+        status="$status, $nr_warn warns"
+    [ -n "$opt_keyword" ] &&
+        status="$status, $nr_keyword matches for /$opt_keyword/"
+    [ "$opt_showtime" = yes ] &&
+        status="$status, in $(pretty_sec $((SECONDS - start_time)) )"
+    echo -n "$status"
+}
+
 fancytee () {
     [ $# -ge 1 ] && local header="$1"
     local start_time=$SECONDS
@@ -98,8 +118,11 @@ fancytee () {
     local nr_error=0
     local nr_warn=0
     local nr_keyword=0
-    local lastupdate=0
+    local lastupdate=-1
     local status=''
+
+    # Immediately print the status first time (0 lines)
+    print_status
 
     while IFS='' read -r line
     do
@@ -111,22 +134,7 @@ fancytee () {
         [[ -n $opt_keyword && $line =~ $opt_keyword ]] && inc nr_keyword
 
         if [ $SECONDS -ne $lastupdate ]; then
-            # clear the previous status line with same length of whitespaces
-            printf "\r${status//?/ }\r"
-
-            status=''
-            [ -n "$fancytee_header" ] &&
-                status="[$fancytee_header] "
-            status="${status}$nr_line lines"
-            [ "$opt_error" = yes ] &&
-                status="$status, $nr_error errors"
-            [ "$opt_warn" = yes ] &&
-                status="$status, $nr_warn warns"
-            [ -n "$opt_keyword" ] &&
-                status="$status, $nr_keyword matches for /$opt_keyword/"
-            [ "$opt_showtime" = yes ] &&
-                status="$status, in $(pretty_sec $((SECONDS - start_time)) )"
-            echo -n "$status"
+            print_status
             lastupdate=$SECONDS
         fi
     done >&2
