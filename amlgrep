@@ -197,7 +197,7 @@ fi
 # Unless --ors is specified explicitly, try to print TS of previous
 # record, because that makes much more sense if RS is a header of a record
 # like timestamp info.
-if [ -z "$opt_ORS" ]
+if [ -z "$opt_ORS" -a ! "$opt_count" ]
 then
     awkprint="printf \"%s\", oldRT;$awkprint"
 fi
