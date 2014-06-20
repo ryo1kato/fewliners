@@ -1,0 +1,118 @@
+#!/usr/bin/env python2.7
+#
+# Count number of concurrent events from log file
+#
+# Input: csv in format like this, sorted by start_time:
+#   start_time,end_time,...
+#   start_time and end_time have to be integer or floating point number.
+#
+# Output:
+#   List of wall-clock time and number of concurrent connections at that moment of time.
+#   Only concurrencies for each start_time is calculated.
+#   start_time,number_of_concurrent_events,...
+#
+import errno
+import heapq
+import bisect
+import sys
+
+
+##############################################################
+##
+## Unused sliding-window version
+##
+# Longest possible connection time in millisec
+CONNECTION_TIMEOUT_MS = 8000
+
+# in case log is output from multiple threads
+# possible delay of out of order log entries
+# (service_log is roughly sorted by EndTime)
+OUTOFORDER_TIMEOUT_MS = 2000
+
+SLIDING_WINDOW_MS = CONNECTION_TIMEOUT_MS + OUTOFORDER_TIMEOUT_MS
+
+def concurrentEventsSlidingWindow(timestamp_pairs):
+    conns = []
+    for start, end in timestamp_pairs:
+        while len(conns) > 0 and conns[0][0] < end - SLIDING_WINDOW_MS/1000.0:
+            # h[0] is out side of SLIDING_WINDOW_MS, means
+            # it would never be a concurrent connection for any of connections hereafter
+            yield (conns[0][1], conns[0][3]) # of conns at start time
+            yield (conns[0][0], conns[0][2]) # of conns at end time
+            del conns[0]
+        concurrent_start = 1
+        concurrent_end = 1
+        i = bisect.bisect(conns, [start])
+        for c in conns[i:]:
+            if c[1] > end or c[0] < start:
+                pass # no overwrap
+            elif c[0] < end:
+                if c[1] > start: # included
+                    c[2] +=1
+                    c[3] +=1
+                else:
+                    concurrent_start += 1
+                    c[2] +=1
+            else:
+                if c[1] < start: # including
+                    concurrent_start += 1
+                    concurrent_end   += 1
+                else:
+                    c[3] += 1
+                    concurrent_end += 1
+        # 3rd/4th item is number of conncurrent connections at end and start time
+        # end comes first to be able to be sorted. 
+        bisect.insort(conns, [end, start, concurrent_end, concurrent_start])
+
+    for c in conns:
+        yield (conns[0][1], conns[0][3])
+        #yield (conns[0][0], conns[0][2])
+
+
+##############################################################
+def concurrentEventsSortedByStartTime(timestamp_pairs):
+    conns = []
+    cif   = 0 # connections in-flight
+    prev_start = 0
+    for start, end, extradata in timestamp_pairs:
+        if start < prev_start:
+            raise ValueError("Input data is not sorted by start time (1st column)")
+        prev_start = start
+        heapq.heappush(conns, end)
+        cif += 1
+        while conns[0] < start:
+            heapq.heappop(conns)
+            cif -= 1
+        yield (start,cif,extradata)
+        prev_start = start
+
+
+concurrentEvents = concurrentEventsSortedByStartTime
+
+if __name__ == '__main__':
+    if len(sys.argv) > 1 :
+        fd = open(sys.argv[1], 'r')
+    else:
+        fd = sys.stdin
+
+    def tspairs(fd):
+        for line in fd:
+            try:
+                l = line.split(',')
+                start = l[0]
+                end = l[1]
+                yield (float(start), float(end), line.rstrip())
+            except ValueError:
+                continue
+
+    try:
+        for start,count,extradata in concurrentEvents(tspairs(fd)):
+            print "{},{}".format(count,extradata)
+    except IOError as e:
+        if e.errno == errno.EPIPE:
+            exit(0)
+        else:
+            raise e
+    except KeyboardInterrupt:
+        exit(1)
+
