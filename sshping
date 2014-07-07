@@ -6,7 +6,7 @@
 set -ue
 
 ssh () {
-    command ssh -o BatchMode=yes -o ConnectTimeout=8 "$@"
+    batch-ssh "$@"
 }
 
 my_ping () {
@@ -22,7 +22,8 @@ my_sshtest () {
 }
 
 my_fstest () {
-    if ret=$(ssh $1 "grep 'ext3 .*\<ro\>' /proc/mounts")
+    # ext3/4 mounted readonly probably means fs or disk fault.
+    if ret=$(ssh $1 "grep 'ext[34] .*\<ro\>' /proc/mounts")
     then
         echo "$ret"
         return 1
@@ -35,25 +36,38 @@ run_all_pings () {
     echo -n "$1: "
     if ! my_ping $1
     then
-        echo "FAIL: $1: Ping failed"
+        echo "FAIL: Ping failed"
         return 1
-    elif ! my_sshping $1
+    elif [ "$opt_portping" != 'yes' ] && ! my_sshping $1
     then
-        echo "FAIL: $1: SSH port is not open (ping OK)"
+        echo "FAIL: SSH port is not open (ping OK)"
         return 1
     elif ! my_sshtest $1
     then
-        echo "FAIL: $1: SSH login with -o BatchMode=yes failed (ssh port open)"
+        echo "FAIL: SSH login with -o BatchMode=yes failed (ssh port open)"
         return 1
     elif ! ret=$(my_fstest $1)
     then
-        echo "FAIL: $1: There's readonly ext3 filesystem: ${ret%% *} (login OK)"
+        echo "FAIL: There's readonly ext3 filesystem: ${ret%% *} (login OK)"
         return 1
     else
         echo "OK"
         return 0
     fi
 }
+
+opt_portping=yes
+
+case $1 in
+    -p|--portping)
+        opt_portping=yes; shift;;
+    -P|--no-portping)
+        opt_portping=no; shift;;
+    -h|--help)
+        echo "Usage: $0 [-p|-P] HOSTNAME1 [HOSTNAME2[...]] "
+        exit 0
+        ;;
+esac
 
 errors=0
 for h in "$@"
