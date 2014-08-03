@@ -22,10 +22,10 @@ print_help () {
 cat <<EOF
 Usage: $0 [OPTIONS] [--] {PID|ARGS[...]}
   Pretty-print long array of arguments to see what's a command is running.
-  If there's only one argument and it's a number(PID), this command prints
-  args of the process of that PID (from /proc/<PID>/cmdline), one per line.
-  If there's more than two arguments, or the first argument is not a
-  number, it prints all arguments one per line.
+  On Linux systems, if there's only one argument and it's a number(PID),
+  the command prints args of the process of that PID one per line,
+  from /proc/<PID>/cmdline.
+  Otherwise, it prints all give arguments one per line.
   By default long line will be shoten to make it fit in one line.
   You can suppress that behavior by '-f' option
 OPTIONS
@@ -35,7 +35,7 @@ OPTIONS
   -P,--no-foldpath Don't insert newline with long paths connected with ':'
   -E,--no-escape   Do not convert newlines to literal '\\n'.
   -n,--number      Print line number
-  -f,--full        Don't abbreviate long args (by default, cut to \$COLUMNS chars)
+  -f,--full        Print long args as-is (default: shorten to fit \$COLUMNS)
   -h,--help        Print this help
 EOF
 }
@@ -215,7 +215,7 @@ do
     shift
 done
 
-[ $# -eq 1 ] && [[ $1 =~ [0-9]+ ]] && opt_pid=yes
+[ $# -eq 1 ] && [[ $1 =~ [0-9]+ ]] && [[ $(uname -o) =~ .*Linux.* ]] && opt_pid=yes
 
 # Need this to prevent expansion error caused by set -u
 recursive_opts+=('--')
