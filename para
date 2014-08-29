@@ -1,0 +1,82 @@
+#!/bin/bash
+#
+# para - poor man's parallelizer
+#
+set -ue
+trap 'echo "$0: Unexpected error at line $LINENO" >&2; exit 1;' ERR
+
+print_help () {
+cat <<EOF
+Usage: ${0##*/} [OPTIONS...] COMMAND [ARGS] < PARAM_FILE
+  For each line of PARAM_FILE, run COMMAND [ARGS...] with {}
+  replaced with the content of the line.
+OPTIONS
+  -j,--jobs=NUM  Run maximum NUM jobs in parallel (default=4)
+  -h,--help      Print this help.
+BUGS
+  Unlike GNU parallel, this command doesn't support reading from multiple
+  files or placeholders variations like {.}, {/}, {1}, {2}, etc.
+EOF
+}
+
+
+###############################################################################
+WARN() { echo "WARN: $0: $*" >&2; }
+ERROR () { echo "ERROR: $0: $*" >&2; }
+DIE () { ERROR "$*"; exit 1; }
+
+case $BASH_VERSION in
+    [123].*) WARN "Your bash is too old ($BASH_VERSION);" \
+                  "wait -n is not supported and not fully parallelize commands."
+esac
+
+opt_verbose='no'
+opt_jobs=4
+
+while [ $# -ge 1 ]
+do
+case $1 in
+    -j[1-9]|-j[1-9][0-9]|-j[1-9][0-9][0-9])
+        opt_jobs=${1#-j};;
+    -[^-][^-]*)
+        # expand '-abcd' to '-a -bcd' (and eventually '-a -b -c -d')
+        firstarg="$1"; shift
+        set -- "${firstarg:0:2}" "-${firstarg:2}" "$@"; continue;;
+    --*=*)
+        firstarg="$1"; shift;
+        set -- "${firstarg%%=*}" "${firstarg#*=}" "$@"; continue;;
+    -j|--jobs) opt_jobs="$2"; shift;;
+    -h|--help)    print_help; exit 0;;
+    --) break;;
+    -*) DIE "Unknown option '$1'";;
+    *) break;;
+esac
+shift
+done
+
+max_jobs=$opt_jobs
+(( max_jobs > 1)) || max_jobs=1
+cmd=("$@")
+while IFS='' read -r line
+do
+    while true
+    do
+        jobs=($(jobs -p))
+        nr_jobs=${#jobs[@]}
+        if (( max_jobs > nr_jobs ))
+        then
+            break
+        else
+            case $BASH_VERSION in
+                [123].*) wait ${jobs[0]};;
+                *) wait -n;;
+            esac
+        fi
+    done
+    (
+        output=$("${cmd[@]//\{\}/$line}" 2>&1)
+        echo "$output"
+    ) &
+done
+wait
+
