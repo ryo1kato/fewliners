@@ -1,0 +1,53 @@
+#!/bin/bash
+#
+# Dumb wrapper to plot two-column CSV in gnuplot
+#
+set -ue
+trap 'echo "$0: Unexpected error at line $LINENO" >&2; exit 1;' ERR
+
+print_help () {
+cat <<EOF
+Usage: ${0##*/} [OPTIONS...] [CSV_FILE]
+  GNU Plot wrapper for two-column CSV files.
+  If no filename is given, try to read from stdin.
+OPTIONS
+  -o,--output=FILE Output to FILE in PNG format.
+  -h,--help        Print this help.
+EOF
+}
+
+###############################################################################
+ERROR () { echo "ERROR: $0: $*" >&2; }
+DIE () { ERROR "$*"; exit 1; }
+
+
+opt_input="-" # default is stdin
+out_output="" # default is screen
+opt_verbose='no'
+while [ $# -ge 1 ]
+do
+case $1 in
+    -[^-][^-]*)
+        # expand '-abcd' to '-a -bcd' (and eventually '-a -b -c -d')
+        firstarg="$1"; shift
+        set -- "${firstarg:0:2}" "-${firstarg:2}" "$@"; continue;;
+    --*=*)
+        firstarg="$1"; shift;
+        set -- "${firstarg%%=*}" "${firstarg#*=}" "$@"; continue;;
+    -o|--output)  opt_output="$2"; shift;;
+    -h|--help)    print_help; exit 0;;
+    --) break;;
+    -*) DIE "Unknown option '$1'";;
+    *) opt_input="$1"; break;;
+esac
+shift
+done
+
+if [ -z "${opt_output:-}" ]
+then
+    persist='-persist'
+else
+    persist=''
+fi
+gnuplot $persist -e "${opt_output:+"set terminal png; set output '$opt_output';"} plot '$1' using '%lf,%lf'"
+
