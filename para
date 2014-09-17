@@ -21,13 +21,17 @@ EOF
 
 
 ###############################################################################
-WARN() { echo "WARN: $0: $*" >&2; }
-ERROR () { echo "ERROR: $0: $*" >&2; }
+WARN() { echo "WARN: $0: $@" >&2; }
+ERROR () { echo "ERROR: $0: $@" >&2; }
 DIE () { ERROR "$*"; exit 1; }
 
+bash_is_old='no';
 case $BASH_VERSION in
-    [123].*) WARN "Your bash is too old ($BASH_VERSION);" \
-                  "wait -n is not supported and not fully parallelize commands."
+[123].*|4.[012].*)
+    WARN "Your bash is too old ($BASH_VERSION)." \
+         "Needs bash-4.3 or later to use 'wait -n' for full parallelization."
+    bash_is_old='yes';
+        ;;
 esac
 
 opt_verbose='no'
@@ -67,10 +71,12 @@ do
         then
             break
         else
-            case $BASH_VERSION in
-                [123].*) wait ${jobs[0]};;
-                *) wait -n;;
-            esac
+            if [ "$bash_is_old" = 'yes' ]
+            then
+                wait ${jobs[0]}
+            else
+                wait -n
+            fi
         fi
     done
     (
