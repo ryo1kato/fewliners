@@ -1,0 +1,28 @@
+#!/bin/sh
+#
+# transpose matrix.
+#
+# Use AWK options to specify delimiter, e.g.,
+#    transpose -F, -v OFS=, input.csv
+# for CSV input/ouput
+#
+awk "$@" '
+    NR == 1 {
+      for ( i = 1 ; i <= NF ; i++ ){
+        line[i] = $i;
+      }
+      next;
+    }
+
+    {
+      for ( i = 1 ; i <= NF ; i++ ){
+        line[i] = line[i] OFS $i;
+      }
+    }
+
+    END {
+      for ( i = 1 ; i <= length(line) ; i++){
+        print line [i]
+      }
+    }
+'
