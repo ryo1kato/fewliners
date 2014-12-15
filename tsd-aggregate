@@ -1,0 +1,82 @@
+#!/bin/bash
+#
+# Aggregate timeseries data in 2-columns CSV format "TimeStamp.Float,Value"
+# to "TimeStamp.MilliSec,Count,Sum,Average"
+#
+
+set -ue
+
+# prevent overflow 2011-03-13 07:06.40 UTC
+epoch_offset=1300000000
+ms=10
+
+print_help () {
+echo "Usage: $0 [--ms=MILLI_SEC] [LOGFILE]";
+echo "Aggregate list of \"timestamp,value-pair\" (2-column CSV) to list of \"timesamp,N,Sum,Avg\" per 10 milli secconds"
+}
+
+if [ $# -ge 1 ]
+then
+case $1 in
+    -h|--help)
+        print_help
+        exit 0
+        ;;
+    -m|--ms)
+        if [ $# -lt 2 ] || [[ ! $2 =~ [0-9]+ ]]
+        then
+            print_help
+            exit 1
+        else
+            ms=$2
+            shift 2
+        fi
+        ;;
+    --ms=*)
+        ms=${1#--ms=}
+        shift 1
+        ;;
+esac
+fi
+
+divide=$((1000/ms))
+
+cat "$@" | awk -F, "
+BEGIN {
+    epoch_offset=$epoch_offset
+    aggregate_count = 0
+    sum = 0
+}
+/^[0-9]/ {
+    time = int( (\$1 - epoch_offset) * $divide )
+    if ( aggregate_count == 0 ) {
+        start_time = time
+    }
+    if ( time < start_time ) {
+        print \"[${0##*/}] ERROR: Input is not sorted by timestamp.\" > \"/dev/stderr\"
+        exit 1
+    }
+    if ( time == start_time ) {
+        sum = sum+\$2
+        aggregate_count++
+    }
+    else {
+        timestamp = epoch_offset + start_time/$divide
+        printf(\"%.3f,%d,%f,%f\\n\",
+                timestamp,
+                aggregate_count,
+                sum,
+                sum / aggregate_count);
+        sum=\$2
+        aggregate_count=1
+        start_time = time
+    }
+}
+END {
+    timestamp = epoch_offset + start_time/$divide
+    printf(\"%.3f,%d,%f,%f\\n\",
+            timestamp,
+            aggregate_count,
+            sum,
+            sum / aggregate_count);
+}"
