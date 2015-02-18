@@ -1,0 +1,6 @@
+#!/bin/bash
+{
+    echo 'all:'
+    echo '	@:'
+    echo "\$(info $*)"
+} | make -f /dev/stdin
