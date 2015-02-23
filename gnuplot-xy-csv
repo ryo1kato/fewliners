@@ -43,11 +43,17 @@ esac
 shift
 done
 
+if [ $# -eq 0 ] || [ $1 = - ]; then
+    input='/dev/stdin'
+else
+    input="$1"
+fi
+
 if [ -z "${opt_output:-}" ]
 then
     persist='-persist'
 else
     persist=''
 fi
-gnuplot $persist -e "${opt_output:+"set terminal png; set output '$opt_output';"} plot '$1' using '%lf,%lf'"
+gnuplot $persist -e "${opt_output:+"set terminal png; set output '$opt_output';"} plot '$input' using '%lf,%lf'"
 
