@@ -1,0 +1,128 @@
+#!/bin/bash
+#
+# cute - CUT Extended, a cut(1) like wrapper-script for awk
+#
+#   - Keep field order as specified in -f; '-f3,2,1' will show 3rd column to the left.
+#   - Reverse order for -f is allowed like '-f 9-2'
+#   - Can have different output delimiter: --ofs (defaults to -d)
+#   - Can use regex for '-d'
+#
+
+set -ue
+trap 'echo "$0: Unexpected error at line $LINENO" >&2; exit 1;' ERR
+
+print_help () {
+cat <<EOF
+Usage: ${0##*/} -f list [-d delim] [file ...]
+  a cut(1) like wrapper-script for awk
+OPTIONS
+  -f list        List of field to select.
+  -d             Same as AWK's -F option.
+  -o,--ofs=OFS   Set output field separator to OFS.
+  -h,--help      Print this help.
+EOF
+}
+
+###############################################################################
+ERROR () { echo "ERROR: $0: $*" >&2; }
+DIE () { ERROR "$*"; exit 1; }
+
+
+ifs=''
+ofs=''
+fields=''
+while [ $# -ge 1 ]
+do
+case $1 in
+    -d?*|-f?*|-o?*)
+        # allow old -d, -f123 way (no spaces between) style to work
+        firstarg="$1"; shift
+        set -- "${firstarg:0:2}" "${firstarg:2}" "$@"; continue;;
+    ## No option without optarg
+    #-[^-][^-]*)
+    #    # expand '-abcd' to '-a -bcd' (and eventually '-a -b -c -d')
+    #    firstarg="$1"; shift
+    #    set -- "${firstarg:0:2}" "-${firstarg:2}" "$@"; continue;;
+    --*=*)
+        firstarg="$1"; shift;
+        set -- "${firstarg%%=*}" "${firstarg#*=}" "$@"; continue;;
+    -h|--help)    print_help; exit 0;;
+    -o|--ofs)     ofs="$2"; shift;;
+    -d)           ifs="$2"; shift;;
+    -f)           fields="$2"; shift;;
+    --) break;;
+    -*) DIE "Unknown option '$1'";;
+    *) break;;
+esac
+shift
+done
+
+ofs="${ofs:-"$ifs"}" # if $ofs is not set, use ifs
+
+run-awk () {
+    awk ${ifs:+-F "${ifs}"} ${ofs:+-v OFS="${ofs}"} "$@"
+}
+
+run-cute () {
+    run-awk -v fieldlist="$fields" '
+    BEGIN {
+        n = split(fieldlist, f, ",")
+        j = 1    # index in flist
+        for (i = 1; i <= n; i++) {
+            if (f[i] == "") {
+                continue
+            }
+            if ( index(f[i], "-") ) {
+                m = split(f[i], g, "-")
+                if (m != 2 || f[i] == "-") {
+                    printf("bad field list: %s\n", f[i]) > "/dev/stderr"
+                    exit 1
+                } else if ( g[1] == "" ) {
+                    for (k = 1; k <= g[2]; k++) flist[j++] = k;
+                } else if ( g[2] == "" ) {
+                    flist[j++] = g[1];
+                    flist[j++] = "NF";
+                } else if (g[1] > g[2]) {
+                    # reverse range
+                    for (k = g[1]; k >= g[2]; k--) flist[j++] = k;
+                } else {
+                    # normal range
+                    for (k = g[1]; k <= g[2]; k++) flist[j++] = k;
+                }
+            } else {
+                flist[j++] = f[i]
+            }
+        }
+        nfields = j - 1
+    }
+    {
+        last=1;
+        printf $flist[1]
+        for (i = 2; i <= nfields; i++) {
+            if (flist[i] == "NF") {
+                for (j = flist[last] + 1; j <= NF; j++)
+                    printf("%s%s", OFS, $j)
+            } else {
+                printf("%s%s", OFS, $flist[i])
+            }
+            last=i
+        }
+        printf "\n"
+    }
+    ' "$@"
+}
+
+if [ -z "$fields" ]
+then
+    # if no -f option is given, print all fields
+    run-awk '
+    {
+        printf("%s", $1);
+        for (i=2; i <= NF; i++) {
+             printf("%s%s", OFS, $i)
+        }
+        printf "\n"
+    }' "$@"
+else
+    run-cute "$@"
+fi
