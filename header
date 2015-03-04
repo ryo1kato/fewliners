@@ -1,0 +1,95 @@
+#!/bin/bash
+print_help () {
+cat <<EOF
+Usage: ${0##*/} [OPTIONS...] COMMAND [ARGS] [FILES...]
+  Shell script template.
+OPTIONS
+  -v,--verbose  Verbose output.
+  -h,--help     Print this help.
+DESCRIPTION
+  Run fliter command like sort, grep with keeping header line (topmost x lines)
+  This is roughly equivalent to:
+    $ head -n 1 FILE; tail +2 FILES... | COMMAND OPTIONS... ARGS... /dev/stdin
+
+  You can call this command with "h\${command}" (via symlink) to call \${command}
+  For example, you can create a symlink 'hgrep' to this script and then
+  following two commands will do exactly the same:
+    $ hgrep OPTIONS... ARGS...
+    $ head -n 1 FILE; tail +2 FILE | grep OPTIONS... ARGS...
+BUGS
+  * You cannot specify how many lines are header. Only first line
+  * If a command is expecting FILES are seekable, it will fail.
+  * FILE arguments must be the last part of command line.
+    Everything after that will be treated as FILE, even when COMMAND recognizes
+    arguments with filename and options mixed together.
+  * Script will silently hangs try reading from stdin if all FILES specified
+    do not exist.
+EOF
+}
+
+###############################################################################
+set -ue
+trap 'echo "${0##*/}: ERROR: Unexpected error at line $LINENO [$BASH_COMMAND, $?, PIPESTATUS=${PIPESTATUS[@]}]" >&2; exit 1;' ERR
+ERROR () { echo "ERROR: ${0##*/}: $*" >&2; }
+DIE () { ERROR "$*"; exit 1; }
+
+[ $# -eq 0 ] && { DIE "Give a command name. See '--help' for options."; }
+
+case "$0" in
+    */header|header)  command="$1"; shift ;;
+    */h*)  command="${0##*/h}" ;;
+    h*)    command="${0##h}" ;;
+esac
+
+args=()
+while [ $# -ge 1 ]
+do
+case $1 in
+    -h|--help) print_help; exit 0;;
+    -*) args+=("$1"); shift; continue;;
+    --) args+=("$1"); break;;
+    *) if [ -e "$1" ]; then
+           break;
+       else     
+           args+=("$1")
+           shift
+           continue
+       fi
+       ;;
+esac
+shift
+done
+
+run_command () {
+    set +e
+    if [ ${#args} = 'unset' ]
+    then
+        "$command"              '/dev/stdin'
+    else
+        "$command" "${args[@]}" '/dev/stdin'
+    fi
+}
+
+if [ $# -eq 0 ]
+then
+    # no file argument, reading from STDIN
+    IFS='' read -r header || DIE "No data"
+    echo -e "$header"
+    cat - | run_command || exit $?
+else
+    if [ "$1" = '-' ]
+    then
+        IFS='' read -r header
+    else
+        head -n 1 "$1"
+    fi
+    {
+        tail -n +2 "$1" 
+        if [ $# -gt 1 ]
+        then
+            shift
+            cat "$@"
+        fi
+    } | run_command || exit $?
+fi
+
