@@ -11,8 +11,9 @@ Usage: ${0##*/} [OPTIONS...] COMMAND [ARGS] < PARAM_FILE
   For each line of PARAM_FILE, run COMMAND [ARGS...] with {}
   replaced with the content of the line.
 OPTIONS
-  -j,--jobs=NUM  Run maximum NUM jobs in parallel (default=4)
+  -j,--jobs=NUM  Run maximum NUM jobs in parallel (default=4).
   -h,--help      Print this help.
+  -p,--print     Print commands being executed to stderr.
 BUGS
   Unlike GNU parallel, this command doesn't support reading from multiple
   files or placeholders variations like {.}, {/}, {1}, {2}, etc.
@@ -36,6 +37,7 @@ esac
 
 opt_verbose='no'
 opt_jobs=4
+opt_print='no'
 
 while [ $# -ge 1 ]
 do
@@ -49,8 +51,9 @@ case $1 in
     --*=*)
         firstarg="$1"; shift;
         set -- "${firstarg%%=*}" "${firstarg#*=}" "$@"; continue;;
-    -j|--jobs) opt_jobs="$2"; shift;;
-    -h|--help)    print_help; exit 0;;
+    -j|--jobs)       opt_jobs="$2"; shift;;
+    -h|--help)       print_help; exit 0;;
+    -p|--print)      opt_print='yes';;
     --) break;;
     -*) DIE "Unknown option '$1'";;
     *) break;;
@@ -59,7 +62,7 @@ shift
 done
 
 max_jobs=$opt_jobs
-(( max_jobs > 1)) || max_jobs=1
+(( max_jobs > 1 )) || max_jobs=1
 cmd=("$@")
 while IFS='' read -r line
 do
@@ -71,18 +74,25 @@ do
         then
             break
         else
-            if [ "$bash_is_old" = 'yes' ]
-            then
-                wait ${jobs[0]}
-            else
-                wait -n
-            fi
+            {
+                if [ "$bash_is_old" = 'yes' ]
+                then
+                    wait ${jobs[0]}
+                else
+                    wait -n
+                fi
+            } || true
         fi
     done
+    if [ "$opt_print" = 'yes' ]; then
+        echo "${cmd[@]//\{\}/$line}" >&2
+    fi
     (
         output=$("${cmd[@]//\{\}/$line}" 2>&1)
         echo "$output"
     ) &
 done
+
+# FIXME this wait waits for all remaining jobs and return zero
 wait
 
