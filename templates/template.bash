@@ -3,8 +3,6 @@
 # My template shell script command
 #
 set -ue
-trap 'echo "$0: Unexpected error at line $LINENO" >&2; exit 1;' ERR
-
 print_help () {
 cat <<EOF
 Usage: ${0##*/} [OPTIONS...] [ARGS]
@@ -18,6 +16,7 @@ EOF
 #shopt -s extglob
 
 ###############################################################################
+trap 'echo "$0: Unexpected error at line $LINENO ($BASH_COMMAND, ret=$?)" >&2; exit 1;' ERR
 ERROR () { echo "ERROR: $0: $*" >&2; }
 DIE () { ERROR "$*"; exit 1; }
 
