@@ -2,13 +2,12 @@
 print_help () {
 cat <<EOF
 Usage: ${0##*/} [OPTIONS...] COMMAND [ARGS] [FILES...]
-  Shell script template.
+  Run fliter command like sort, grep with keeping header line (topmost x lines)
 OPTIONS
   -v,--verbose  Verbose output.
   -h,--help     Print this help.
 DESCRIPTION
-  Run fliter command like sort, grep with keeping header line (topmost x lines)
-  This is roughly equivalent to:
+  Run COMMAND in a way roughly equivalent to:
     $ head -n 1 FILE; tail +2 FILES... | COMMAND OPTIONS... ARGS... /dev/stdin
 
   You can call this command with "h\${command}" (via symlink) to call \${command}
