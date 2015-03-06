@@ -1,0 +1,40 @@
+#!/bin/bash
+set -ue
+print_help () {
+cat <<EOF
+Usage: ${0##*/} COMMAND -- ARGS...
+  Equivalent to:
+    for arg in ARGS...; do COMMAND arg; done
+OPTIONS
+  -h,--help     Print this help.
+EOF
+}
+
+#shopt -s extglob
+
+###############################################################################
+trap 'echo "$0: Unexpected error at line $LINENO ($BASH_COMMAND, ret=$?)" >&2; exit 1;' ERR
+ERROR () { echo "ERROR: $0: $*" >&2; }
+DIE () { ERROR "$*"; exit 1; }
+
+command=()
+while [ $# -ge 1 ]
+do
+case $1 in
+    -h|--help)
+        print_help
+        exit 0;;
+    --)
+        shift; break;;
+    *)
+        command+=("$1");;
+esac
+shift
+done
+
+[ $# -eq 0 ] && DIE "missing argument or '--'"
+
+for arg in "$@"
+do
+    "${command[@]}" "$arg"
+done
