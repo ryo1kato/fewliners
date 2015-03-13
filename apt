@@ -15,20 +15,34 @@ case $1 in
         apt-cache "$@"
         ;;
     # apt-get
-    update|upgrade|install|remove|purge|source|check|download|clean|autoclean|autoremove|uninstall)
+    update|upgrade|install|remove|purge|check|download|clean|autoclean|autoremove|uninstall)
         set -x
         sudo apt-get "$@"
+        ;;
+    source)
+        set -x
+        apt-get "$@"
         ;;
     get|cache)
         aptcmd="apt-$1"
         shift
         $aptcmd "$@"
         ;;
+    -f)
+        if [ "${2-}" = install ]
+        then
+            set -x
+            sudo apt-get "$@"
+        else
+            echo "ERROR: -f is only allowed for install in this wrapper script." >&2
+            exit 1
+        fi
+        ;;
     ''|-h|--help)
         echo "Usage: apt {Commands for apt-get or apt-cache}"
         ;;
     *)
-        echo "ERROR: unsupported apt-(get|cache) command for this wrapper: $1"
+        echo "ERROR: unsupported apt-(get|cache) command for this wrapper: $1" >&2
         exit 1
         ;;
 esac
