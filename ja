@@ -1,0 +1,6 @@
+#!/bin/sh
+
+env LANG="ja_JP.utf8" \
+    LC_ALL="C" \
+    LC_PAPER="$LANG" \
+    "$@"

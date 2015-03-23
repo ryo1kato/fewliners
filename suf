@@ -1,0 +1,119 @@
+#!/bin/bash
+
+print_help () {
+cat <<EOF
+Usage: suf [OPTIONS] FILE[...] [EXT]
+A mv(1) wrapper to add or remove filename suffix (extension).
+Add file name suffix EXT to FILE(s). This is equivalent to following shell snippet:
+    for file in "\${FILE[@]}"
+    do
+        mv "\${file}" "\${file}\$EXT"
+    done
+If EXT doesn't start with "." (period), it will use ".\$EXT" instead.
+If EXT is not given, try to remove it from FILE(s). In this case all suffixes to be removed must be the same.
+OPTIONS
+    -h,--help    Print this help
+    -f,--force   Overwrite existing file(s)
+#    -r,--remove  Remove suffix. This is default if EXT is not given
+BUGS AND KNOWN ISSUES
+    EXT must be maximum four chars long.
+EOF
+}
+
+
+set -ue
+#shopt -s extglob
+
+###############################################################################
+trap 'echo "$0: Unexpected error at line $LINENO ($BASH_COMMAND, ret=$?)" >&2; exit 1;' ERR
+ERROR () { echo "ERROR: ${0##*/}: $*" >&2; }
+DIE () { ERROR "$*"; exit 1; }
+
+opt_force='no'
+while [ $# -ge 1 ]
+do
+case $1 in
+    -h|--help)  print_help; exit 0;;
+    -f|--force) opt_force='yes';;
+    --) break;;
+    -*) DIE "Unknown option '$1'";;
+    *) break;;
+esac
+shift
+done
+
+cannot_move_file () {
+    source="$1"
+    dest="$2"
+
+    if [[ ! -e "${source}" ]]
+    then
+        ERROR "A file '${source}' does not exist."
+        return 0
+    elif [[ -e "${dest}" && $opt_force != yes ]]
+    then
+        ERROR "A file '${dest}' already exists. Use '--force' to overwrite."
+        return 0
+    elif [[ -d "${dest}" ]]
+    then
+        ERROR "'${dest}' is a directory, cannot overwrite."
+        return 0
+    else
+        return 1
+    fi
+}
+
+remove_suffix () {
+    first_suffix="${1##*.}"
+    for file in "$@"
+    do
+        if [[ ! ${file} =~ \. ]]
+        then
+            DIE "Files don't have a suffix: ${file}"
+        elif [[ ! ${file##*.} =~ $first_suffix$ ]]
+        then
+            DIE "Files don't have a common suffix: $1 and ${file}"
+        elif cannot_move_file "$file" "${file%.$first_suffix}"
+        then
+            exit 1
+        fi
+    done
+    for file in "$@"
+    do
+        mv -i "$file" "${file%.$first_suffix}"
+    done
+}
+
+
+add_suffix () {
+    last_arg="${@:$#}"
+    last_file_idx=$(($# - 1))
+    if [[ $last_arg =~ ^\. ]]
+    then
+        suffix="$last_arg"
+    else
+        suffix=".$last_arg"
+    fi
+
+    for file in "${@:1:$last_file_idx}"
+    do
+        if cannot_move_file "$file" "$file$suffix"
+        then
+            exit 1
+        fi
+    done
+    for file in "${@:1:$last_file_idx}"
+    do
+        mv -i "$file" "$file$suffix"
+    done
+}
+
+
+last_arg="${@:$#}"
+if [[ $last_arg =~ ^\.?(.|..|...|....)$ && ! -e $last_arg ]]
+then
+    add_suffix "$@"
+else
+    remove_suffix "$@"
+fi
+
