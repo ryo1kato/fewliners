@@ -2,9 +2,17 @@
 set -ue
 print_help () {
 cat <<EOF
-Usage: ${0##*/} COMMAND -- ARGS...
-  Equivalent to:
-    for arg in ARGS...; do COMMAND arg; done
+Usage: ${0##*/} COMMAND ARGS...
+       ${0##*/} COMMAND OPTIONS -- ARGS...
+       ${0##*/} --help
+Run COMMAND looping over ARGS.
+Equivalent to:
+    \$ for arg in ARGS...; do COMMAND arg; done
+If a string '{}' is in OPTIONS, it will be replaced with argument, instead of
+having an argument added to the end of OPTIONS:
+    \$ for arg in ARGS...; do COMMAND \${OPTIONS//{}/\$arg}; done
+If separator '--' is omitted, all arguments after second one will be treated
+as arguments.
 OPTIONS
   -h,--help     Print this help.
 EOF
@@ -23,18 +31,50 @@ do
 case $1 in
     -h|--help)
         print_help
-        exit 0;;
+        exit 0
+        ;;
     --)
-        shift; break;;
+        if [ $# -eq 1 ]
+        then
+            DIE "No argument after '$1'"
+        else
+            shift
+            break
+        fi
+        ;;
     *)
-        command+=("$1");;
+        command+=("$1")
+        ;;
 esac
 shift
 done
 
-[ $# -eq 0 ] && DIE "missing argument or '--'"
+if [ ${#command[@]} -le 1 ]
+then
+    print_help
+    exit 1
+fi
 
-for arg in "$@"
-do
-    "${command[@]}" "$arg"
-done
+if [ $# -eq 0 ]
+then
+    # No delimitor; assuming only first argument is command part
+    # and all the rest are arguments to iterate over.
+    set -- "${command[@]}"
+    command=("$1")
+    shift
+fi
+
+
+case "${command[*]}" in
+*{}*)
+    for arg in "$@"
+    do
+        "${command[@]//\{\}/$arg}"
+    done;;
+*)
+    for arg in "$@"
+    do
+        "${command[@]}" "$arg"
+    done
+esac
+
