@@ -7,9 +7,9 @@ trap 'echo "$0: Unexpected error at line $LINENO" >&2; exit 1;' ERR
 
 print_help () {
 cat <<EOF
-Usage: ${0##*/} [OPTIONS...] [CSV_FILE]
+Usage: ${0##*/} [OPTIONS...] [CSV_FILE...]
   GNU Plot wrapper for two-column CSV files.
-  If no filename is given, try to read from stdin.
+  If no CSV_FILE argument is given, try to read from stdin.
 OPTIONS
   -o,--output=FILE Output to FILE in PNG format.
   -h,--help        Print this help.
@@ -44,9 +44,9 @@ shift
 done
 
 if [ $# -eq 0 ] || [ $1 = - ]; then
-    input='/dev/stdin'
+    input=('/dev/stdin')
 else
-    input="$1"
+    input=("$@")
 fi
 
 if [ -z "${opt_output:-}" ]
@@ -55,5 +55,12 @@ then
 else
     persist=''
 fi
-gnuplot $persist -e "${opt_output:+"set terminal png; set output '$opt_output';"} plot '$input' using '%lf,%lf'"
+
+plotargs=()
+for file in "${input[@]}"
+do
+    plotargs+="'$file' using '%lf,%lf' title '$file',"
+done
+
+gnuplot "$persist" -e "${opt_output:+"set terminal png; set output '$opt_output';"}; plot ${plotargs[*]%,}"
 
