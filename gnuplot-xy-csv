@@ -62,5 +62,5 @@ do
     plotargs+="'$file' using '%lf,%lf' title '$file',"
 done
 
-gnuplot "$persist" -e "${opt_output:+"set terminal png; set output '$opt_output';"}; plot ${plotargs[*]%,}"
+gnuplot $persist -e "${opt_output:+"set terminal png; set output '$opt_output';"}; plot ${plotargs[*]%,}"
 
