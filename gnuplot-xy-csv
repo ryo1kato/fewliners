@@ -22,7 +22,8 @@ DIE () { ERROR "$*"; exit 1; }
 
 
 opt_input="-" # default is stdin
-out_output="" # default is screen
+opt_output="" # default is screen
+opt_terminal=""
 opt_verbose='no'
 while [ $# -ge 1 ]
 do
@@ -35,6 +36,7 @@ case $1 in
         firstarg="$1"; shift;
         set -- "${firstarg%%=*}" "${firstarg#*=}" "$@"; continue;;
     -o|--output)  opt_output="$2"; shift;;
+    -t|--terminal) opt_terminal="$2"; shift;;
     -h|--help)    print_help; exit 0;;
     --) break;;
     -*) DIE "Unknown option '$1'";;
@@ -62,5 +64,5 @@ do
     plotargs+="'$file' using '%lf,%lf' title '$file',"
 done
 
-gnuplot $persist -e "${opt_output:+"set terminal png; set output '$opt_output';"}; plot ${plotargs[*]%,}"
+gnuplot $persist -e "${opt_terminal:+"set terminal $opt_terminal;"}${opt_output:+"set terminal png; set output '$opt_output';"}; plot ${plotargs[*]%,}"
 
