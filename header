@@ -2,7 +2,7 @@
 print_help () {
 cat <<EOF
 Usage: ${0##*/} [OPTIONS...] COMMAND [ARGS] [FILES...]
-  Run fliter command like sort, grep with keeping header line (topmost x lines)
+  Run fliter command like sort, grep with keeping header line (topmost 1 line)
 OPTIONS
   -v,--verbose  Verbose output.
   -h,--help     Print this help.
@@ -16,12 +16,12 @@ DESCRIPTION
     $ hgrep OPTIONS... ARGS...
     $ head -n 1 FILE; tail +2 FILE | grep OPTIONS... ARGS...
 BUGS
-  * You cannot specify how many lines are header. Only first line
+  * You cannot specify how many lines are header. Only first one line.
   * If a command is expecting FILES are seekable, it will fail.
-  * FILE arguments must be the last part of command line.
-    Everything after that will be treated as FILE, even when COMMAND recognizes
+  * FILES arguments must be the last part of command line.
+    Everything after that will be treated as FILES, even when COMMAND recognizes
     arguments with filename and options mixed together.
-  * Script will silently hangs try reading from stdin if all FILES specified
+  * Script will silently hangs try reading from stdin if any of FILES specified
     do not exist.
 EOF
 }
@@ -49,7 +49,7 @@ case $1 in
     --) args+=("$1"); break;;
     *) if [ -e "$1" ]; then
            break;
-       else     
+       else
            args+=("$1")
            shift
            continue
@@ -61,7 +61,7 @@ done
 
 run_command () {
     set +e
-    if [ ${#args} = 'unset' ]
+    if [ ${#args} = 0 ]
     then
         "$command"              '/dev/stdin'
     else
@@ -83,7 +83,7 @@ else
         head -n 1 "$1"
     fi
     {
-        tail -n +2 "$1" 
+        tail -n +2 "$1"
         if [ $# -gt 1 ]
         then
             shift
@@ -91,4 +91,3 @@ else
         fi
     } | run_command || exit $?
 fi
-
