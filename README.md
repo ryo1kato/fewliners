@@ -4,6 +4,7 @@ Various tiny scripts to help day-to-day CLI life
 
 Most of the scripts have `--help` option
 
+
 ## Scripting
 * `cutlink`  - Convert a symlink/hardlink to a real file (by copying it).
 * `for-each-line` - Poor person's GNU parallel.
@@ -14,18 +15,20 @@ Most of the scripts have `--help` option
 * `xcat` - Extended version of zcat - supports `.bz2`, `.xz`, `.lzma` also.
 * `zpv`  - `zcat` equivalent of `pv`
 
+
 ## Data Manipuration
 * `add`       - sum/avg/min/max or percentile of columns for CSV like data.
-* `amlgrep`   - AWK Multiline Log Grep: AWK wrapper to grep multiline logs.
-* `concurrent-events` - Count a 
-* `cute`      - CUT Extended. A `cut(1)` like command implemented by awk
+* `amlgrep`   - AWK Multiline Log Grep:
+    * moved to a separate repository: https://github.com/ryo1kato/mlr-grep
+* `concurrent-events` - Count numbers of concurrents in logfile.
+* `cute`      - Extended `cut(1)` command with regex and column re-ordering.
 * `fancytee`  - Text version of pv with keyword counting (NOTE: it's slow).
 * `timediff`  - Calculate time differences for list of datetime data.
-* `transpose` - An AWK wrapper to transpose matrix
+* `transpose` - An AWK wrapper to transpose a matrix.
 * `tsd-aggregate - Aggregate (calc. sum and avg.) from time series data.
-* `uniqcc` - Similar to Synonymous to 'uniq -c', but counts to the right, commna separated.
-* `urldecode` - URL encode.
-* `urlencode` - URL decode.
+* `uniqcc`    - Synonymous to 'uniq -c', but commna separated and number on the right side.
+* `urldecode` - URL encode strings.
+* `urlencode` - URL decode strings.
 
 
 ## Systems Operations
@@ -33,6 +36,7 @@ Most of the scripts have `--help` option
 * `batch-ssh` - ssh wrapper to enable `-o BatchMode=yes` and other options.
 * `sshping`  - Check remote host health: ping, ssh port, ssh login, fs health.
 * `tarzcf` - A `tar zxvf DIRNAME.tar.gz DIRNAME` shorthand.
+
 
 ## Other
 * `args` - Pretty print arguments of a command. Nice to debug looong Java command line etc.
