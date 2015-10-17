@@ -1,0 +1,134 @@
+#!/bin/bash
+
+set -ue
+
+print_help () {
+cat <<EOF
+Usage: ${0##*/} [OPTIONS]... FILE1 FILE2 [FILE3]...
+  join(1) for multiple files.
+OPTIONS
+  -a FILENUM        also print unpairable lines from file FILENUM, where
+                    FILENUM is 1, 2, 3..., corresponding to FILE1, FILE2, FILE3...
+  -e EMPTY          replace missing input fields with EMPTY
+  -i,--ignore-case  ignore differences in case when comparing fields
+  -j FIELD          equivalent to '-1 FIELD -2 FIELD -3 FIELD ...'
+  -t CHAR           use CHAR as input and output field separator
+  -v FILENUM        like -a FILENUM, but suppress joined output lines
+  -1 FIELD          join on this FIELD of file 1
+  -2 FIELD          join on this FIELD of file 2
+  -3 FIELD          join on this FIELD of file 3, etc., etc up to -99
+  --check-order     check that the input is correctly sorted, even
+                    if all input lines are pairable
+  --nocheck-order   do not check that the input is correctly sorted
+  --header          treat the first line in each file as field headers,
+  -h,--help         Print this help.
+EOF
+}
+
+
+###############################################################################
+trap 'echo "$0: Unexpected error at line $LINENO ($BASH_COMMAND, ret=$?)" >&2; e
+xit 1;' ERR
+ERROR () { echo "ERROR: $0: $*" >&2; }
+DIE () { ERROR "$*"; exit 1; }
+#DEBUG () { echo "DEBUG: $*" >&2; }
+DEBUG () { :; }
+
+original_args=("$@")
+
+opts=()
+level0_opts=()
+fieldlist=()  # for -1, -2, -3... option
+unpairable=() # for -a option
+unpairable_only=() # for -v option
+
+while [ $# -ge 1 ]
+do
+case $1 in
+# -e EMPTY           replace missing input fields with EMPTY
+# -t CHAR            use CHAR as input and output field separator
+-[eitjav]?*)
+    firstarg="$1"; shift; set -- "${firstarg:0:2}" "${firstarg:2}" "$@"
+    continue;;
+-[eit])
+    opts+=("$1" "$2"); shift;;
+# -i, --ignore-case  ignore differences in case when comparing fields
+# --check-order      check that the input is correctly sorted,
+#                    even if all input lines are pairable
+# --nocheck-order    do not check that the input is correctly sorted
+# --header           treat the first line in each file as field headers,
+#                    print them without trying to pair them
+--check-order|-nocheck-order|--header|-i|--ignore-case)
+    opts+=("$1");;
+# -j FIELD          equivalent to '-1 FIELD -2 FIELD'
+# -1 FIELD          join on this FIELD of file 1
+# -2 FIELD          join on this FIELD of file 2
+# -a FILENUM        also print unpairable lines from file FILENUM, where
+#                   FILENUM is 1 or 2, corresponding to FILE1 or FILE2
+# -v FILENUM        like -a FILENUM, but suppress joined output lines
+-j)
+    level0_opts+=($1 $2)
+    # specified field will be on the leftmost column in output.
+    # therefore, when cascading, we must use field 1 for
+    # FILE1 (stdout of previous join output)
+    opts+=(-2 "$2")
+    shift;;
+-1|-2)
+    level0_opts+=($1 $2);
+    shift;;
+-[3-9]|-[0-9][0-9]) fieldlist[$((${1:1}-1))]=$2; shift ;;
+-a)
+    idx=$2
+    unpairable[$((idx-1))]='set'; shift ;;
+-v)
+    idx=$2
+    unpairable_only[$((idx-1))]='set'; shift ;;
+--) break;;
+-*) DIE "Unknown option '$1'";;
+*)  break;;
+esac
+shift
+done
+
+#debug
+DEBUG fieldlist = ${fieldlist[@]:-unset}
+DEBUG unpairable = ${unpairable[@]:-unset}
+DEBUG unpairable_only = ${unpairable_only[@]:-unset}
+
+files=("$@")
+numfiles=$#
+
+DEBUG files = ${files[@]}
+
+set_fieldopts () {
+    if [ ${2:-unset} != unset ]
+    then
+        fieldopts
+    fi
+}
+
+join_recurse () {
+    local i=$1
+    local fieldopts=()
+
+    [ ${fieldlist[$i]:-unset} = unset ]       || fieldopts+=(-2 ${fieldlist[$i]})
+    [ ${unpairable[$i]:-unset} = unset ]      || fieldopts+=(-a 2)
+    [ ${unpairable_only[$i]:-unset} = unset ] || fieldopts+=(-v 2)
+
+    local i="$1"
+    DEBUG join "${opts[@]}" ${fieldopts[@]:-} - "${files[$i]}"
+    if (( i >= numfiles - 1 )); then
+        join "${opts[@]}" ${fieldopts[@]:-} - "${files[$i]}"
+    else
+        join "${opts[@]}" ${fieldopts[@]:-} - "${files[$i]}" | join_recurse $((i+1))
+    fi
+}
+
+
+if [ $# -le 2 ]; then
+    join "${original_args[@]}"
+else
+    # files[] starts from 0; '2' is the third
+    DEBUG join "${opts[@]}" "$1" "$2"
+    join "${opts[@]}" "$1" "$2" | join_recurse 2 "$@"
+fi

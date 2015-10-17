@@ -23,6 +23,7 @@ Most of the scripts have `--help` option
 * `concurrent-events` - Count numbers of concurrents in logfile.
 * `cute`      - Extended `cut(1)` command with regex and column re-ordering.
 * `fancytee`  - Text version of pv with keyword counting (NOTE: it's slow).
+* `mjoin`     - join(1) for multiple files.
 * `timediff`  - Calculate time differences for list of datetime data.
 * `transpose` - An AWK wrapper to transpose a matrix.
 * `tsd-aggregate - Aggregate (calc. sum and avg.) from time series data.
