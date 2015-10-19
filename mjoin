@@ -7,16 +7,14 @@ cat <<EOF
 Usage: ${0##*/} [OPTIONS]... FILE1 FILE2 [FILE3]...
   join(1) for multiple files.
 OPTIONS
-  -a FILENUM        also print unpairable lines from file FILENUM, where
-                    FILENUM is 1, 2, 3..., corresponding to FILE1, FILE2, FILE3...
-  -e EMPTY          replace missing input fields with EMPTY
-  -i,--ignore-case  ignore differences in case when comparing fields
-  -j FIELD          equivalent to '-1 FIELD -2 FIELD -3 FIELD ...'
-  -t CHAR           use CHAR as input and output field separator
+  -a FILENUM        also print unpairable lines from file FILENUM, where FILENUM
+                    is 1, 2, 3..., corresponding to FILE1, FILE2, FILE3...
   -v FILENUM        like -a FILENUM, but suppress joined output lines
-  -1 FIELD          join on this FIELD of file 1
-  -2 FIELD          join on this FIELD of file 2
-  -3 FIELD          join on this FIELD of file 3, etc., etc up to -99
+  -e EMPTY          replace missing input fields with EMPTY
+  -t CHAR           use CHAR as input and output field separator
+  -{1|2|3|..} FIELD join on this FIELD of file 1, 2, or 3 etc.
+  -j FIELD          equivalent to '-1 FIELD -2 FIELD -3 FIELD -4 FIELD ...'
+  -i,--ignore-case  ignore differences in case when comparing fields
   --check-order     check that the input is correctly sorted, even
                     if all input lines are pairable
   --nocheck-order   do not check that the input is correctly sorted
@@ -29,7 +27,7 @@ EOF
 ###############################################################################
 trap 'echo "$0: Unexpected error at line $LINENO ($BASH_COMMAND, ret=$?)" >&2; e
 xit 1;' ERR
-ERROR () { echo "ERROR: $0: $*" >&2; }
+ERROR () { echo "ERROR: ${0##*/}: $*" >&2; }
 DIE () { ERROR "$*"; exit 1; }
 #DEBUG () { echo "DEBUG: $*" >&2; }
 DEBUG () { :; }
@@ -83,12 +81,20 @@ case $1 in
 -v)
     idx=$2
     unpairable_only[$((idx-1))]='set'; shift ;;
+-h|--help)
+    print_help
+    exit 1;;
 --) break;;
 -*) DIE "Unknown option '$1'";;
 *)  break;;
 esac
 shift
 done
+
+if [ $# -eq 0 ]
+then
+    DIE "Too few argument. Run with '--help' for options."
+fi
 
 #debug
 DEBUG fieldlist = ${fieldlist[@]:-unset}
