@@ -5,13 +5,16 @@
 set -ue
 print_help () {
 cat <<EOF
-Usage: ${0##*/} [OPTIONS...] [ARGS]
+Usage: ${0##*/} [$(u OPTIONS)...] [$(u ARGS)]
   Shell script template.
-OPTIONS
+$(b OPTIONS)
   -v,--verbose  Verbose output.
   -h,--help     Print this help.
 EOF
 }
+
+b () { tput bold; echo -n "$*"; tput sgr0; } # bold
+u () { tput smul; echo -n "$*"; tput rmul; } # underline
 
 #shopt -s extglob
 
