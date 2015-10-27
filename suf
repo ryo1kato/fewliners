@@ -14,7 +14,6 @@ If EXT is not given, try to remove it from FILE(s). In this case all suffixes to
 OPTIONS
     -h,--help    Print this help
     -f,--force   Overwrite existing file(s)
-#    -r,--remove  Remove suffix. This is default if EXT is not given
 BUGS AND KNOWN ISSUES
     EXT must be maximum four chars long.
 EOF
