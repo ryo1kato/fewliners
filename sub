@@ -1,0 +1,76 @@
+#!/bin/bash
+#
+# My template shell script command
+#
+set -ue
+print_help () {
+cat <<EOF
+Usage: ${0##*/} [$(u OPTIONS)...] $(u PATTERN/[REPLACE]) [$(u ...)]
+   substitute or deliete string using regex pattern(s).
+   Similar to 'sed -r -e s/$(u PATTERN)//g' or 'sed -r -e s/$(u PATTERN1)/$(u REPLACE)/g'.
+   You have to use extended regular expression.
+$(b OPTIONS)
+  $(b -n)  Equivalent to the $(b sed)'s same option; ignore lines without match.
+  $(b -d), $(b --delimiter)=$(u D)
+      Use $(u D) as a delimiter instead of '$(b /)'
+  $(b -h), $(b --help)
+      Print this help.
+$(b EXAMPLES)
+  ${0##*/} foo/
+  ${0##*/} -d @ foo@foobar onetwothree@fourfive
+  ${0##*/} -n foo/foobar
+EOF
+}
+
+b () { tput bold; echo -n "$*"; tput sgr0; } # bold
+u () { tput smul; echo -n "$*"; tput rmul; } # underline
+
+#shopt -s extglob
+
+###############################################################################
+trap 'echo "$0: Unexpected error at line $LINENO ($BASH_COMMAND, ret=$?)" >&2; exit 1;' ERR
+ERROR () { echo "$(b ERROR): ${0##*/}: $*" >&2; }
+DIE () { ERROR "$*"; exit 1; }
+
+
+case $(uname -o) in
+    Darwin) sedopts=(-E);;
+    GNU/*) sedopts=(-r);;
+esac
+
+delim='/'
+p=''
+while [ $# -ge 1 ]
+do
+case $1 in
+    -[^-][^-]*)
+        # expand '-abcd' to '-a -bcd' (and eventually '-a -b -c -d')
+        firstarg="$1"; shift
+        set -- "${firstarg:0:2}" "-${firstarg:2}" "$@"; continue;;
+    --*=*)
+        firstarg="$1"; shift;
+        set -- "${firstarg%%=*}" "${firstarg#*=}" "$@"; continue;;
+    -d|--delimiter) delim=$2; shift;;
+    -n) sedopts+=(-n); p='p';;
+    -h|--help)    print_help; exit 0;;
+    --) break;;
+    -*) DIE "Unknown option '$1'";;
+    *) break;;
+esac
+shift
+done
+
+patterns=()
+for pat in "$@"
+do
+    case $pat in
+        ?*${delim}*)
+            patterns+=(-e "s${delim}${pat}${delim}g$p")
+            ;;
+        *)
+            DIE "pattern $(u $pat) doesn't contain with $delim (use $(b -d) option to spedify a different delimiter)"
+            ;;
+    esac
+done
+
+/usr/bin/sed "${sedopts[@]}" "${patterns[@]}"
