@@ -64,7 +64,7 @@ patterns=()
 for pat in "$@"
 do
     case $pat in
-        ?*${delim}*)
+        *${delim}*)
             patterns+=(-e "s${delim}${pat}${delim}g$p")
             ;;
         *)
