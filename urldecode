@@ -2,9 +2,20 @@
 import sys
 import urllib
 
-if len(sys.argv) > 1:
-    for arg in sys.argv[1:]:
-        sys.stdout.write(urllib.unquote_plus(arg))
-else:
-    for line in sys.stdin.readlines():
-        sys.stdout.write(urllib.unquote_plus(line))
+try:
+    if len(sys.argv) > 1:
+        for arg in sys.argv[1:]:
+            sys.stdout.write(urllib.unquote_plus(arg))
+    else:
+        line = sys.stdin.readline()
+        while line:
+            sys.stdout.write(urllib.unquote_plus(line))
+            line = sys.stdin.readline()
+except KeyboardInterrupt:
+    sys.exit(0)
+except IOError, e:
+    import errno
+    if e.errno == errno.EPIPE:
+        sys.exit(0)
+    else:
+        raise
