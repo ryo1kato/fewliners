@@ -274,13 +274,10 @@ class Tabulation(object):
 
 
 def calc_lines(i, delimiter=None):
-    line = i.readline()
     t = Tabulation(delimiter=delimiter)
-    while line:
+    for line in i:
         t.feedline(line)
-        line = i.readline()
     return t
-
 
 
 def main(args):
