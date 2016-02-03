@@ -9,11 +9,11 @@ import urllib
 try:
     if len(sys.argv) > 1:
         for arg in sys.argv[1:]:
-            sys.stdout.write(urllib.unquote_plus(arg))
+            sys.stdout.write(urllib.quote_plus(arg))
     else:
         line = sys.stdin.readline()
         while line:
-            sys.stdout.write(urllib.unquote_plus(line))
+            sys.stdout.write(urllib.quote_plus(line))
             line = sys.stdin.readline()
 except KeyboardInterrupt:
     sys.exit(0)
