@@ -26,10 +26,11 @@ Most of the scripts have `--help` option
 * `mjoin`     - join(1) for multiple files.
 * `timediff`  - Calculate time differences for list of datetime data.
 * `transpose` - An AWK wrapper to transpose a matrix.
-* `tsd-aggregate - Aggregate (calc. sum and avg.) from time series data.
+* `tsd-aggregate` - Aggregate (calc. sum and avg.) from time series data.
 * `uniqcc`    - Synonymous to 'uniq -c', but commna separated and number on the right side.
 * `urldecode` - URL encode strings.
 * `urlencode` - URL decode strings.
+* `hashuniq`  - a 100x faster alternative for "sort | uniq".
 
 
 ## Systems Operations
