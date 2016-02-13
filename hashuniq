@@ -7,7 +7,7 @@ import argparse
 
 parser = argparse.ArgumentParser(description=desc)
 parser.add_argument('-c', '--count', action='store_true', help='count and print number of duplicates.')
-parser.add_argument('-d', '--dup',   action='store_true', help='only print lines with duplicates.')
+#parser.add_argument('-d', '--dup',   action='store_true', help='only print lines with duplicates.')
 parser.add_argument('filename', metavar='FILE', type=str, nargs='?')
 
 
@@ -30,8 +30,10 @@ def main(args):
                 sys.stdout.write(line)
 
     if args.count:
+        maxdigits = len(str(max(counter.values())))
+        f = "{:" + str(maxdigits) + "d} {}"
         for line in counter:
-            sys.stdout.write("{:3d} {}".format(counter[line], line))
+            sys.stdout.write(f.format(counter[line], line))
 
 
 if __name__ == '__main__':
