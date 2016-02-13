@@ -1,15 +1,24 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
-desc="uniq(1) implementation with hash - you don't have to sort."
+desc="100x faster 'sort|uniq' implementation using hash (doesn't use sort :-)."
 
 import sys
 import argparse
 
 parser = argparse.ArgumentParser(description=desc)
-parser.add_argument('-c', '--count', action='store_true', help='count and print number of duplicates.')
-#parser.add_argument('-d', '--dup',   action='store_true', help='only print lines with duplicates.')
-parser.add_argument('filename', metavar='FILE', type=str, nargs='?')
+parser.add_argument('-c', '--count', action='store_true',
+        help='Precede each output line with the count of the number of times'
+             ' the line occurred in the input, followed by a single space.'
+             ' With this option, output is sorted by number of occurences.')
+parser.add_argument('-r', '--reverse', action='store_true',
+        help='With -c option, reverse the sort order.')
+parser.add_argument('-d', '--dup', action='store_true',
+        help='only output lines with duplicates in the input.')
+parser.add_argument('-u', '--uniq', action='store_true',
+        help='Only output lines without duplicates in the input.')
 
+parser.add_argument('filename', metavar='FILE', type=str, nargs='?',
+        help='Input filename. If omitted, read from standard input.')
 
 def main(args):
     if args.filename:
@@ -21,22 +30,44 @@ def main(args):
         infd = sys.stdin
 
     counter = dict()
-    for line in infd:
-        if line in counter:
-            counter[line] += 1
-        else:
-            counter[line] = 1
-            if not args.count:
-                sys.stdout.write(line)
+    if args.count or args.uniq or args.dup:
+        #----------------------------#
+        for line in infd:            #
+            if line in counter:      #
+                counter[line] += 1   #
+            else:                    #
+                counter[line] = 1    #
+        #----------------------------#
+        if args.count:
+            maxdigits = len(str(max(counter.values())))
+            f = "{:" + str(maxdigits) + "d} {}"
+            sorted_counter = sorted(counter, key=counter.get)
+            if args.reverse:
+                sorted_counter.reverse()
+            for line in sorted_counter:
+                count = counter[line]
+                if not (args.dup or args.uniq) \
+                    or (args.dup and count >= 2) \
+                    or (args.uniq and count == 1):
+                    sys.stdout.write(f.format(counter[line], line))
+        elif args.uniq:
+            for line in counter:
+                if counter[line] == 1:
+                    sys.stdout.write(line)
+        else: #args.dup (or args.dup and args.uniq, which is invalid)
+            for line in counter:
+                if counter[line] != 1:
+                    sys.stdout.write(line)
 
-    if args.count:
-        maxdigits = len(str(max(counter.values())))
-        f = "{:" + str(maxdigits) + "d} {}"
-        for line in counter:
-            sys.stdout.write(f.format(counter[line], line))
-
+    else:
+        for line in infd:
+            # Avoid putting 'if' statements in the loop for nearly 2x speed.
+            #----------------------------#
+            if line not in counter:      #
+                counter[line] = True     #
+                sys.stdout.write(line)   #
+            #----------------------------#
 
 if __name__ == '__main__':
     (args) = parser.parse_args()
     main(args)
-
