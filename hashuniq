@@ -1,0 +1,40 @@
+#!/usr/bin/python
+
+desc="uniq(1) implementation with hash - you don't have to sort."
+
+import sys
+import argparse
+
+parser = argparse.ArgumentParser(description=desc)
+parser.add_argument('-c', '--count', action='store_true', help='count and print number of duplicates.')
+parser.add_argument('-d', '--dup',   action='store_true', help='only print lines with duplicates.')
+parser.add_argument('filename', metavar='FILE', type=str, nargs='?')
+
+
+def main(args):
+    if args.filename:
+        if args.filename == '-':
+            infd = sys.stdin
+        else:
+            infd = open(args.filename)
+    else:
+        infd = sys.stdin
+
+    counter = dict()
+    for line in infd:
+        if line in counter:
+            counter[line] += 1
+        else:
+            counter[line] = 1
+            if not args.count:
+                sys.stdout.write(line)
+
+    if args.count:
+        for line in counter:
+            sys.stdout.write("{:3d} {}".format(counter[line], line))
+
+
+if __name__ == '__main__':
+    (args) = parser.parse_args()
+    main(args)
+
