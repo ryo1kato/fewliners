@@ -68,6 +68,16 @@ def main(args):
                 sys.stdout.write(line)   #
             #----------------------------#
 
+
 if __name__ == '__main__':
     (args) = parser.parse_args()
-    main(args)
+    try:
+        main(args)
+    except KeyboardInterrupt:
+        sys.exit(0)
+    except IOError, e:
+        import errno
+        if e.errno == errno.EPIPE:
+            sys.exit(0)
+        else:
+            raise
