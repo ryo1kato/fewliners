@@ -1,8 +1,4 @@
-#!/usr/bin/python
-import sys
-import urllib
-
-#!/usr/bin/python
+#!/usr/bin/env python
 import sys
 import urllib
 
