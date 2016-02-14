@@ -1,0 +1,52 @@
+#!/bin/bash
+
+set -e
+
+input='foo
+bar
+baz
+quux
+foo
+foo
+foo
+bar
+bar
+
+hoge
+piyo
+huga
+hoge'
+
+myuniq () {
+    local uniqc="$(echo | uniq -c)"
+    local offset=${#uniqc}
+    let offset--
+
+    opt_count=no
+    for opt in $@; do case $opt in
+        -c) opt_count=yes
+    esac; done
+
+    if [ $opt_count = yes ]
+    then
+        uniq "$@" | cut -c$offset-
+    else
+        uniq "$@"
+    fi
+}
+
+check () {
+    printf "Checking $* ... "
+    if diff -u  <(echo "$input" | hashuniq "$@" | sort ) \
+                <(echo "$input" | sort | myuniq "$@" | sort)
+    then
+        printf "OK\n"
+    fi
+}
+
+check -c
+check -u
+check -d
+check -c -u
+check -c -d
+
