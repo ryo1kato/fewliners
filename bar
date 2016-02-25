@@ -1,0 +1,86 @@
+#!/bin/bash
+
+set -ue
+trap 'echo "$0: Unexpected error at line $LINENO" >&2; exit 1;' ERR
+
+print_help () {
+cat <<EOF
+Usage: ${0##*/} -f list [-d delim] [file ...]
+  AWK wrapper to print bar chart along with data like CSV.
+  You might want to use column(1) command to align columns.
+EXAMPLE
+  \$ ${0##*/} < data.txt
+  line_one,10,****
+  line_two,20,********
+  line_three,35,****
+  line_four,5,10,**
+  \$ ${0##*/} < data.txt | column -ts,
+  line_one    10  ****
+  line_two    20  ********
+  line_three  35  ****
+  line_four   5   **
+OPTIONS
+  -f FIELD        A field to use for calculating length of bars.
+  -s,--scale=NUM  Scale lengths of bars so that a '*' represents NUM.
+                  For example, if --scale=5 and value in input is 15, prints '***'.
+                  Default is $scale.
+  -d,--delim      Same as AWK's -F option.
+  -o,--ofs        Set output field separator. Same as AWK's OFS special variable.
+  -h,--help       Print this help.
+EOF
+}
+
+###############################################################################
+ERROR () { echo "ERROR: $0: $*" >&2; }
+DIE () { ERROR "$*"; exit 1; }
+
+ifs=''
+ofs=''
+field='0'
+scale='10'
+max='0'
+while [ $# -ge 1 ]
+do
+case $1 in
+    -d?*|-f?*|-o?*)
+        # allow old -d, -f123 way (no spaces between) style to work
+        firstarg="$1"; shift
+        set -- "${firstarg:0:2}" "${firstarg:2}" "$@"; continue;;
+    --*=*)
+        firstarg="$1"; shift;
+        set -- "${firstarg%%=*}" "${firstarg#*=}" "$@"; continue;;
+    -f)           field="$2"; shift;;
+    -s|--scale)   scale="$2"; shift;;
+    -d)           ifs="$2"; shift;;
+    --ofs)        ofs="$2"; shift;;
+    -h|--help)    print_help; exit 0;;
+    --) break;;
+    -*) DIE "Unknown option '$1'";;
+    *) break;;
+esac
+shift
+done
+
+ofs="${ofs:-"$ifs"}" # if $ofs is not set, use ifs
+
+run-awk () {
+    awk ${ifs:+-F "${ifs}"} ${ofs:+-v OFS="${ofs}"} "$@"
+}
+
+run-bar () {
+    run-awk -v field="$field" -v scale="$scale" '
+    BEGIN {
+        barstr="*************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************>"
+    }
+    {
+        if ( field == 0 )
+            value = $NF
+        else
+            value = $field
+        bar = substr(barstr, 0, (value / scale) )
+        print($0, bar)
+    }
+    ' "$@"
+}
+
+run-bar "$@"
