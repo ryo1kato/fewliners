@@ -5,30 +5,53 @@
 set -ue
 trap 'echo "$0: Unexpected error at line $LINENO" >&2; exit 1;' ERR
 
+b () { tput bold; echo -n "$*"; tput sgr0; } # bold
+u () { tput smul; echo -n "$*"; tput rmul; } # underline
+
 print_help () {
 cat <<EOF
-Usage: ${0##*/} [OPTIONS...] COMMAND [ARGS] < PARAM_FILE
-  For each line of PARAM_FILE, run COMMAND [ARGS...] with {}
-  replaced with the content of the line.
-OPTIONS
-  -j,--jobs=NUM  Run maximum NUM jobs in parallel (default=4).
-  -h,--help      Print this help.
-  -p,--print     Print commands being executed to stderr.
-BUGS
+Usage: ${0##*/} [$(u OPTIONS)...] $(u COMMAND) [$(u ARGS)] < $(u PARAM_FILE)
+A simpler GNU parallel like parallelizer implemented with Bash.
+For each line of $(u PARAM_FILE), run $(u COMMAND) [$(u ARGS)...] with $(b {})
+replaced with the content of the line.
+$(b OPTIONS)
+-j,--jobs=$(u NUM)     Run maximum $(u NUM) jobs in parallel (default=$opt_jobs).
+-h,--help         Print this help.
+-o,--output=$(u FILE)  Redirect command output to $(u FILE)
+                  If placeholder(s) $(b {}) is contained in $(u FILE),
+                  output will be separated per commands, with $(b {}) substitued.
+                  Otherwise all outputs will be sent to one file name $(u FILE).
+-e,--error        Immediately exit when observing any error.
+                  Because commands are ran in parallel, this option doesn't
+                  necessarily stop commands following the one failed from being
+                  executed.
+-v,--verbose      Print commands being executed to stderr.
+-p,--print        Same as -v.
+$(b BUGS)
   Unlike GNU parallel, this command doesn't support reading from multiple
-  files or placeholders variations like {.}, {/}, {1}, {2}, etc.
+  files or placeholder variants like {.}, {/}, {1}, {2}, etc.
 EOF
 }
 
 
 ###############################################################################
-WARN() { echo "WARN: $0: $@" >&2; }
-ERROR () { echo "ERROR: $0: $@" >&2; }
+WARN () { echo "WARN: ${0##*/}: $@" >&2; }
+ERROR () { echo "ERROR: ${0##*/}: $@" >&2; }
 DIE () { ERROR "$*"; exit 1; }
+
+enabled () {
+    [ "$1" == 'yes' ]
+}
+
 
 bash_is_old='no';
 case $BASH_VERSION in
 [123].*|4.[012].*)
+    if [ $BASH = /bin/bash -a -x /usr/local/bin/bash ]
+    then
+        # MacOSX users might have newer version of bash in /usr/local
+        exec /usr/local/bin/bash "$0" "$@"
+    fi
     WARN "Your bash is too old ($BASH_VERSION)." \
          "Needs bash-4.3 or later to use 'wait -n' for full parallelization."
     bash_is_old='yes';
@@ -36,8 +59,10 @@ case $BASH_VERSION in
 esac
 
 opt_verbose='no'
-opt_jobs=4
+opt_jobs=8
 opt_print='no'
+opt_error='no'
+opt_output=''
 
 while [ $# -ge 1 ]
 do
@@ -51,9 +76,11 @@ case $1 in
     --*=*)
         firstarg="$1"; shift;
         set -- "${firstarg%%=*}" "${firstarg#*=}" "$@"; continue;;
-    -j|--jobs)       opt_jobs="$2"; shift;;
-    -h|--help)       print_help; exit 0;;
-    -p|--print)      opt_print='yes';;
+    -j|--jobs)                  opt_jobs="$2"; shift;;
+    -h|--help)                  print_help; exit 0;;
+    -o|--output)                opt_output="$2"; shift;;
+    -e|--error)                 opt_error='yes';;
+    -p|--print|-v|--verbose)    opt_print='yes';;
     --) break;;
     -*) DIE "Unknown option '$1'";;
     *) break;;
@@ -61,6 +88,30 @@ esac
 shift
 done
 
+output_per_command='no'
+case "$opt_output" in
+    '')     : ;;
+    *'{}'*) output_per_command='yes';;
+    *)      touch $opt_output;;
+esac
+
+
+save_output () {
+    local line="$1"
+    local output="$2"
+    if enabled $output_per_command
+    then
+        echo "$output" > "${opt_output//\{\}/$line}"
+    elif [ -n "$opt_output" ]
+    then
+        echo "$output" >> "$opt_output"
+    else
+        echo "$output"
+    fi
+}
+
+
+errors=0
 max_jobs=$opt_jobs
 (( max_jobs > 1 )) || max_jobs=1
 cmd=("$@")
@@ -68,31 +119,57 @@ while IFS='' read -r line
 do
     while true
     do
+        if [ $errors -gt 0 -a $opt_error = 'yes' ]
+        then
+            DIE "Exitting with an error, as --error option is given."
+        fi
         jobs=($(jobs -p))
         nr_jobs=${#jobs[@]}
         if (( max_jobs > nr_jobs ))
         then
-            break
+            break # to read next line
         else
-            {
-                if [ "$bash_is_old" = 'yes' ]
-                then
-                    wait ${jobs[0]}
-                else
-                    wait -n
-                fi
-            } || true
+            if [ "$bash_is_old" = 'yes' ]
+            then
+                wait ${jobs[0]}
+            else
+                wait -n
+            fi || (( ++errors ))
         fi
     done
     if [ "$opt_print" = 'yes' ]; then
         echo "${cmd[@]//\{\}/$line}" >&2
     fi
     (
-        output=$("${cmd[@]//\{\}/$line}" 2>&1)
-        echo "$output"
+        set +e
+        output=$("${cmd[@]//\{\}/$line}" 2>&1); ret=$?
+        save_output "$line" "$output"
+        exit $ret
     ) &
 done
 
-# FIXME this wait waits for all remaining jobs and return zero
-wait
+
+# This waits for all remaining jobs and return zero, if any.
+# Happens when above inner while loop waits only enough to make
+# (( max_jobs > nr_jobs )) condition true
+while [ "$(jobs -p)" != '' ]
+do
+    if ! wait -n
+    then
+        if enabled $opt_error
+        then
+            DIE "Exitting with an error, as --error option is given."
+        else
+            let ++errors
+        fi
+    fi
+done
+
+if (( errors > 0 ))
+then
+    WARN "Had $errors errors."
+    exit 1
+else
+    exit 0
+fi
 
