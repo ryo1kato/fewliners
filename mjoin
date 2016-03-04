@@ -84,7 +84,7 @@ case $1 in
 -h|--help)
     print_help
     exit 1;;
---) break;;
+--) shift; break;;
 -*) DIE "Unknown option '$1'";;
 *)  break;;
 esac

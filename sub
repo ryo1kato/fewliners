@@ -53,7 +53,7 @@ case $1 in
     -d|--delimiter) delim=$2; shift;;
     -n) sedopts+=(-n); p='p';;
     -h|--help)    print_help; exit 0;;
-    --) break;;
+    --) shift; break;;
     -*) DIE "Unknown option '$1'";;
     *) break;;
 esac

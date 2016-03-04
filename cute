@@ -50,7 +50,7 @@ case $1 in
     -o|--ofs)     ofs="$2"; shift;;
     -d)           ifs="$2"; shift;;
     -f)           fields="$2"; shift;;
-    --) break;;
+    --) shift; break;;
     -*) DIE "Unknown option '$1'";;
     *) break;;
 esac

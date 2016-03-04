@@ -74,7 +74,7 @@ case $1 in
     -t|--time)      opt_showtime='yes';;
     -I|--case-sensitive) shopt -u nocasematch;;
     -h|--help)      print_help; exit 0;;
-    --) break;;
+    --) shift; break;;
     -*) DIE "Unknown option '$1'";;
     *) break;;
 esac

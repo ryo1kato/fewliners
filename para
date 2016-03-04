@@ -81,7 +81,7 @@ case $1 in
     -o|--output)                opt_output="$2"; shift;;
     -e|--error)                 opt_error='yes';;
     -p|--print|-v|--verbose)    opt_print='yes';;
-    --) break;;
+    --) shift; break;;
     -*) DIE "Unknown option '$1'";;
     *) break;;
 esac

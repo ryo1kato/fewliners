@@ -37,7 +37,7 @@ case $1 in
         set -- "${firstarg%%=*}" "${firstarg#*=}" "$@"; continue;;
     -v|--verbose) ((++opt_verbose));;
     -h|--help)    print_help; exit 0;;
-    --) break;;
+    --) shift; break;;
     -*) DIE "Unknown option '$1'";;
     *) break;;
 esac

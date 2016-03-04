@@ -38,7 +38,7 @@ case $1 in
     -o|--output)  opt_output="$2"; shift;;
     -t|--terminal) opt_terminal="$2"; shift;;
     -h|--help)    print_help; exit 0;;
-    --) break;;
+    --) shift; break;;
     -*) DIE "Unknown option '$1'";;
     *) opt_input="$1"; break;;
 esac
