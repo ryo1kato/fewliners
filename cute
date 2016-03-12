@@ -97,7 +97,7 @@ run-cute () {
     }
     {
         last=1;
-        printf $flist[1]
+        printf "%s", $flist[1]
         for (i = 2; i <= nfields; i++) {
             if (flist[i] == "NF") {
                 for (j = flist[last] + 1; j <= NF; j++)
