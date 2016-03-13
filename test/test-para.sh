@@ -19,3 +19,16 @@ do
         exit 1
     fi
 done
+
+echo 'sleep 1; true
+sleep 1; false
+sleep 1; true
+sleep 1; false
+sleep 1; true
+sleep 1; false
+sleep 1; true
+sleep 1; false' | warn=$(para -v sh -c '{}' 2>&1); ret=$?
+
+if [ "$warn" = 'WARN: para: Had 4 errors.' -a $ret -eq 1 ]; then
+    echo "OK"
+fi

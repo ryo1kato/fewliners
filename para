@@ -27,6 +27,11 @@ $(b OPTIONS)
                   executed.
 -v,--verbose      Print commands being executed to stderr.
 -p,--print        Same as -v.
+$(b RETURN CODE)
+  Exits with code 0 if all of the commands ran exitted successfully.
+  Otherwise print number of commands exitted with non-zero code and
+  exits with code 1. For bash older than ver4.3, errors are ignored,
+  and as such, '--error' option doesn't work.
 $(b BUGS)
   Unlike GNU parallel, this command doesn't support reading from multiple
   files or placeholder variants like {.}, {/}, {1}, {2}, etc.
@@ -47,15 +52,14 @@ enabled () {
 bash_is_old='no';
 case $BASH_VERSION in
 [123].*|4.[012].*)
-    if [ $BASH = /bin/bash -a -x /usr/local/bin/bash ]
-    then
-        # MacOSX users might have newer version of bash in /usr/local
-        exec /usr/local/bin/bash "$0" "$@"
-    fi
-    WARN "Your bash is too old ($BASH_VERSION)." \
-         "Needs bash-4.3 or later to use 'wait -n' for full parallelization."
+    #if [ $BASH = /bin/bash -a -x /usr/local/bin/bash ]
+    #then
+    #    # MacOSX users might have newer version of bash in /usr/local
+    #    exec /usr/local/bin/bash "$0" "$@"
+    #fi
+    WARN "Your bash is too old ($BASH_VERSION). Errors will be ignored."
     bash_is_old='yes';
-        ;;
+    ;;
 esac
 
 opt_verbose='no'
@@ -99,6 +103,7 @@ esac
 save_output () {
     local line="$1"
     local output="$2"
+    [ -n "$output" ] || return
     if enabled $output_per_command
     then
         echo "$output" > "${opt_output//\{\}/$line}"
@@ -117,27 +122,30 @@ max_jobs=$opt_jobs
 cmd=("$@")
 while IFS='' read -r line
 do
+    if [ $errors -gt 0 -a $opt_error = 'yes' ]
+    then
+        DIE "Exitting with an error, as --error option is given."
+    fi
+
     while true
     do
-        if [ $errors -gt 0 -a $opt_error = 'yes' ]
-        then
-            DIE "Exitting with an error, as --error option is given."
-        fi
         jobs=($(jobs -p))
         nr_jobs=${#jobs[@]}
         if (( max_jobs > nr_jobs ))
         then
-            break # to read next line
+            break
         else
-            if [ "$bash_is_old" = 'yes' ]
+            if enabled "$bash_is_old"
             then
-                wait ${jobs[0]}
+                sleep 0.1
             else
-                wait -n
-            fi || (( ++errors ))
+                wait -n || (( ++errors ))
+                break
+            fi
         fi
     done
-    if [ "$opt_print" = 'yes' ]; then
+
+    if enabled "$opt_print"; then
         echo "${cmd[@]//\{\}/$line}" >&2
     fi
     (
@@ -149,21 +157,24 @@ do
 done
 
 
-# This waits for all remaining jobs and return zero, if any.
-# Happens when above inner while loop waits only enough to make
-# (( max_jobs > nr_jobs )) condition true
-while [ "$(jobs -p)" != '' ]
-do
-    if ! wait -n
-    then
-        if enabled $opt_error
+# This waits for all remaining jobs and return zero.
+if enabled "$bash_is_old"
+then
+    wait
+else
+    while [ "$(jobs -p)" != '' ]
+    do
+        if ! wait -n
         then
-            DIE "Exitting with an error, as --error option is given."
-        else
-            let ++errors
+            if enabled $opt_error
+            then
+                DIE "Exitting with an error, as --error option is given."
+            else
+                let ++errors
+            fi
         fi
-    fi
-done
+    done
+fi
 
 if (( errors > 0 ))
 then
