@@ -1,11 +1,39 @@
-#!/bin/sh
-exec readlink -f "$@"
+#!/bin/bash
+#
+# realpath command isn't standard...
+#
 
-# #!/usr/bin/env python
-# import sys
-# import os
-# 
-# if len(sys.argv) <= 1:
-#         print os.path.realpath(os.getcwd())
-# else:
-#         print os.path.realpath(sys.argv[1])
+if [ -x /usr/bin/realpath ]
+then
+    exec /usr/bin/realpath "$@"
+fi
+
+case $(uname -o) in
+    *Linux*|*GNU*)
+        if [ -x /usr/bin/readlink ]
+        then
+            exec /usr/bin/readlink -f "$@"
+        fi
+        ;;
+esac
+
+
+# else, try to find GNU readlink for we might not have the GNU readlink's -f option.
+
+for exe in /usr/local/bin/greadlink /usr/local/bin/readlink /usr/local/opt/coreutils/libexec/gnubin/readlink
+do
+    exec readlink -f "$@"
+done
+
+
+# else, use python. Might be slow.
+
+/usr/bin/env python -c '
+import sys
+import os
+
+if len(sys.argv) <= 1:
+        print os.path.realpath(os.getcwd())
+else:
+        print os.path.realpath(sys.argv[1])
+' "$@"
