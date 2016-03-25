@@ -13,15 +13,19 @@ trap 'echo "$0: Unexpected error at line $LINENO" >&2; exit 1;' ERR
 
 print_help () {
 cat <<EOF
-Usage: ${0##*/} -f list [-d delim] [file ...]
+Usage: $(b ${0##*/}) $(b -f) $(u list) [$(b -d) $(u delim)] [$(u file) ...]
   a cut(1) like wrapper-script for awk
-OPTIONS
-  -f list        List of field to select.
-  -d             Same as AWK's -F option.
-  -o,--ofs=OFS   Set output field separator to OFS.
-  -h,--help      Print this help.
+$(b OPTIONS)
+  -f $(u list)      List of field to select.
+  -d $(u delim)     Same as AWK's -F option.
+  -o,--ofs=$(u fs)  Set output field separator to $(u fs). Default is "$(b ,)",
+               or $(u delim) if it's passed with $(u -d) and is one character.
+  -h,--help    Print this help.
 EOF
 }
+
+b () { tput bold; echo -n "$*"; tput sgr0; } # bold
+u () { tput smul; echo -n "$*"; tput rmul; } # underline
 
 ###############################################################################
 ERROR () { echo "ERROR: $0: $*" >&2; }
@@ -29,7 +33,7 @@ DIE () { ERROR "$*"; exit 1; }
 
 
 ifs=''
-ofs=''
+ofs=','
 fields=''
 while [ $# -ge 1 ]
 do
@@ -57,7 +61,11 @@ esac
 shift
 done
 
-ofs="${ofs:-"$ifs"}" # if $ofs is not set, use ifs
+if [ ${#ifs} -eq 1 ]
+then
+    # if $ofs is not set, and ifs is one character, use ifs
+    ofs="${ofs:-"$ifs"}"
+fi
 
 run-awk () {
     awk ${ifs:+-F "${ifs}"} ${ofs:+-v OFS="${ofs}"} "$@"
