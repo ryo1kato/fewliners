@@ -8,8 +8,10 @@ then
     exec /usr/bin/realpath "$@"
 fi
 
-case $(uname -o) in
-    *Linux*|*GNU*)
+# else, try to find GNU readlink for the -f option.
+
+case $(uname -s) in
+    *Linux*)
         if [ -x /usr/bin/readlink ]
         then
             exec /usr/bin/readlink -f "$@"
@@ -17,12 +19,11 @@ case $(uname -o) in
         ;;
 esac
 
-
-# else, try to find GNU readlink for we might not have the GNU readlink's -f option.
+# Even for MacOSX or BSD, GNU coreutils is might be install
 
 for exe in /usr/local/bin/greadlink /usr/local/bin/readlink /usr/local/opt/coreutils/libexec/gnubin/readlink
 do
-    exec readlink -f "$@"
+    [ -e $exe ] && exec $exe -f "$@"
 done
 
 
