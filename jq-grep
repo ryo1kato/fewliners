@@ -1,0 +1,136 @@
+#!/bin/bash
+set -ue
+print_help () {
+cat <<EOF
+$(b Usage: ${0##*/}) [$(u OPTIONS)...] $(u REGEX) $(u NODE) [$(u FILE)...]
+    A $(b jq) wrapper to filter JSON objects with a $(u NODE) contains string that
+    matches with regex $(u REGEX). Supports (mostly) grep compatible $(b -c), $(b -v), $(b -H),
+    $(b -h), and $(b --color) options.
+$(b OPTIONS)
+  $(b -n, --node)
+      Print only the JSON nodes spedified with $(u NODE), instead of entire object.
+  $(b -c, --count)
+      Suppress normal output; instead print a count of matching lines for each
+      input file.  With the -v option  (see below), count non-matching lines.
+  $(b --color)
+      Pass $(b --color-output) option to $(b jq). Default if output is a TTY. 
+  $(b -v, --invert-match)
+      Invert the sense of matching, to select non-matching lines.
+  $(b -H,--with-filename)
+  $(b -h,--no-filename)
+      If $(b -c) option is present, print or suppress the file name for each match.
+      This is the default when there is more than one file to search.
+      Unlike normal $(b grep) these options are valid only with $(b -c) option.
+  $(b --help)
+      Print this help.
+EOF
+}
+
+b () { tput bold; echo -n "$*"; tput sgr0; } # bold
+u () { tput smul; echo -n "$*"; tput rmul; } # underline
+
+###############################################################################
+trap 'echo "$0: Unexpected error at line $LINENO ($BASH_COMMAND, ret=$?)" >&2; exit 1;' ERR
+ERROR () { echo "ERROR: $0: $*" >&2; }
+DIE () { ERROR "$*"; exit 1; }
+
+
+opt_invert='false'
+opt_count='no'
+opt_nodeonly='false'
+opt_filename='auto'
+if [ -t 1 ]
+then jq_color='--color-output'
+else jq_color=''
+fi
+while [ $# -ge 1 ]
+do
+case $1 in
+    -[^-][^-]*)
+        # expand '-abcd' to '-a -bcd' (and eventually '-a -b -c -d')
+        firstarg="$1"; shift
+        set -- "${firstarg:0:2}" "-${firstarg:2}" "$@"; continue;;
+    --*=*)
+        firstarg="$1"; shift;
+        set -- "${firstarg%%=*}" "${firstarg#*=}" "$@"; continue;;
+    -n|--node)          opt_nodeonly='true';;
+    -c|--count)         opt_count='yes' ;;
+    -v|--invert-match)  opt_invert='true';;
+    --color|--colour)   jq_color='--color-output';;
+    -H|--with-filename) opt_filename='yes';;
+    -h|--no-filename)   opt_filename='no';;
+    -h|--help)          print_help; exit 0;;
+    --) shift; break;;
+    -*) DIE "Unknown option '$1'";;
+    *) break;;
+esac
+shift
+done
+
+[ $# -ge 2 ] || DIE "Too few arguments"
+regex="$1"
+haystack="$2"
+shift 2
+
+case "$opt_filename" in
+auto)
+    if [ $# -ge 2 ]; then opt_filename='yes'; else opt_filename='no'; fi
+    ;;
+yes)
+    [ "$opt_count" = 'yes' ] || DIE "--with-filename is invalid without --count"
+    [ $# -ge 1 ] || DIE "--with-filename is invalid when reading only from stdin"
+    ;;
+esac
+
+
+read -r -d '' jq_filter <<-EOF || true
+$haystack as \$haystack
+| [ (if \$haystack == null then "" else if \$haystack|type == "string" then \$haystack else \$haystack|tostring end end | test("$regex")), . ]
+| select(.[0] != $opt_invert)
+| .[1]
+| if $opt_nodeonly then \$haystack else . end
+EOF
+
+
+run_jq_grep () {
+    jq --exit-status "$jq_filter" "$@"
+    ret=$?
+    if [ $ret -eq 1 ]
+    then
+        return 0
+    elif [ $ret -eq 4 ]
+    then
+        return 1
+    else
+        return $ret
+    fi
+}
+
+run_jq_grep_count () {
+    run_jq_grep "$@" | jq -s 'length'
+    return ${PIPESTATUS[0]}
+}
+
+# Remember we check [ $# -ne 0 ] when opt_count = 'yes'
+if [ "$opt_count" = 'yes' ]
+then
+    if [ "$opt_filename" = 'yes' ]
+    then
+        for file in "$@"
+        do
+            ret=1
+            printf "$file:"
+            if run_jq_grep_count $file
+            then
+                ret=0
+            fi
+        done
+        exit $ret
+    else
+        run_jq_grep_count "$@"
+        exit $?
+    fi
+else
+    run_jq_grep $jq_color "$@"
+    exit $?
+fi
