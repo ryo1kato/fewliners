@@ -16,6 +16,10 @@ $(b OPTIONS)
       Pass $(b --color-output) option to $(b jq). Default if output is a TTY. 
   $(b -v, --invert-match)
       Invert the sense of matching, to select non-matching lines.
+  $(b --any) - default
+  $(b --all) - default if $(u --inverted-match)
+      When there's multiple matching nodes in a object selected by $(u NODE), control
+      whether all or any of nodes must much (or not much) the pattern.
   $(b -H,--with-filename)
   $(b -h,--no-filename)
       If $(b -c) option is present, print or suppress the file name for each match.
@@ -39,6 +43,7 @@ opt_invert='false'
 opt_count='no'
 opt_nodeonly='false'
 opt_filename='auto'
+opt_junction='any' # disjunction(any) or conjunction (all)
 if [ -t 1 ]
 then jq_color='--color-output'
 else jq_color=''
@@ -56,6 +61,7 @@ case $1 in
     -n|--node)          opt_nodeonly='true';;
     -c|--count)         opt_count='yes' ;;
     -v|--invert-match)  opt_invert='true';;
+    --all|--any)        opt_junction="${1#--}";;
     --color|--colour)   jq_color='--color-output';;
     -H|--with-filename) opt_filename='yes';;
     -h|--no-filename)   opt_filename='no';;
@@ -73,24 +79,29 @@ haystack="$2"
 shift 2
 
 case "$opt_filename" in
-auto)
-    if [ $# -ge 2 ]; then opt_filename='yes'; else opt_filename='no'; fi
-    ;;
-yes)
-    [ "$opt_count" = 'yes' ] || DIE "--with-filename is invalid without --count"
-    [ $# -ge 1 ] || DIE "--with-filename is invalid when reading only from stdin"
-    ;;
+auto) if [ $# -ge 2 ]; then opt_filename='yes'; else opt_filename='no'; fi ;;
+yes)  [ "$opt_count" = 'yes' ] || DIE "--with-filename is invalid without --count"
+      [ $# -ge 1 ] || DIE "--with-filename is invalid when reading only from stdin"
+      ;;
 esac
 
+if [ "$opt_junction" = 'auto' ]
+then
+    if [ "$opt_invert" = 'yes' ]
+    then $opt_junction = 'any'
+    else $opt_junction = 'all'
+    fi
+fi
 
 read -r -d '' jq_filter <<-EOF || true
-$haystack as \$haystack
-| [ (if \$haystack == null then "" else if \$haystack|type == "string" then \$haystack else \$haystack|tostring end end | test("$regex")), . ]
-| select(.[0] != $opt_invert)
-| .[1]
-| if $opt_nodeonly then \$haystack else . end
+def grep(regex; invert):
+    select(. != null)
+        | (if type == "string" then . else (.|tostring) end)
+            | (test(regex) != invert)
+;
+select([ $haystack ] | map(grep("$regex"; $opt_invert)) | $opt_junction)
+    | if $opt_nodeonly then [ $haystack | select( grep("$regex"; $opt_invert) ) ] else . end
 EOF
-
 
 run_jq_grep () {
     jq --exit-status "$jq_filter" "$@"
@@ -111,7 +122,7 @@ run_jq_grep_count () {
     return ${PIPESTATUS[0]}
 }
 
-# Remember we check [ $# -ne 0 ] when opt_count = 'yes'
+# Remember we check [ $# -ne 0 ] when opt_count = 'yes', so do not check again here.
 if [ "$opt_count" = 'yes' ]
 then
     if [ "$opt_filename" = 'yes' ]
@@ -127,10 +138,18 @@ then
         done
         exit $ret
     else
-        run_jq_grep_count "$@"
-        exit $?
+        if run_jq_grep_count "$@"
+        then
+            exit 0
+        else
+            exit $?
+        fi
     fi
 else
-    run_jq_grep $jq_color "$@"
-    exit $?
+    if run_jq_grep $jq_color "$@"
+    then
+        exit 0
+    else
+        exit $?
+    fi
 fi
