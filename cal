@@ -1,4 +1,15 @@
 #!/bin/bash
+print_help () {
+cat <<EOF
+Usage: cal [MONTH]
+  cal(1) wrapper with smarter month and year detection
+  When there's only 1 argument, interpret it as closest month.
+  symboric names like 'jan', 'feb' are also be understood.
+
+  If there's more than one parameters, just call the original
+  cal(1) command as-is.
+EOF
+}
 
 set -ue
 
@@ -53,7 +64,11 @@ then
             cal_month_smart $1
             ;;
         jan*|feb*|mar*|apr*|may|jun*|jul*|aug*|sep*|oct*|nov*|dec*)
-            cal_month_smart_by_name $1;; 
+            cal_month_smart_by_name $1;;
+        -h|--help)
+            print_help
+            exit 0
+            ;;
         *)
             cal_orig "$@";;
     esac
