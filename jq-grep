@@ -2,10 +2,11 @@
 set -ue
 print_help () {
 cat <<EOF
-$(b Usage: ${0##*/}) [$(u OPTIONS)...] $(u REGEX) $(u NODE) [$(u FILE)...]
+$(b Usage: ${0##*/}) [$(u OPTIONS)...] $(u REGEX) [$(u NODE)] [$(u FILE)...]
     A $(b jq) wrapper to filter JSON objects with a $(u NODE) contains string that
     matches with regex $(u REGEX). Supports (mostly) grep compatible $(b -c), $(b -v), $(b -H),
     $(b -h), and $(b --color) options.
+
 $(b OPTIONS)
   $(b -n, --node)
       Print only the JSON nodes spedified with $(u NODE), instead of entire object.
@@ -16,6 +17,8 @@ $(b OPTIONS)
       Pass $(b --color-output) option to $(b jq). Default if output is a TTY. 
   $(b -v, --invert-match)
       Invert the sense of matching, to select non-matching lines.
+  $(b -i, --ignore-case)
+      Ignore case distinctions in both the $(u REGEX) and the input.
   $(b --any) - default
   $(b --all)
       When there's multiple matching nodes in a object selected by $(u NODE), control
@@ -41,9 +44,10 @@ ERROR () { echo "ERROR: $0: $*" >&2; }
 DIE () { ERROR "$*"; exit 1; }
 
 
+regex_flags='g'
+opt_nodeonly='false'
 opt_invert='false'
 opt_count='no'
-opt_nodeonly='false'
 opt_filename='auto'
 opt_junction='any' # disjunction(any) or conjunction (all)
 opt_debug=''
@@ -64,6 +68,7 @@ case $1 in
     -n|--node)          opt_nodeonly='true';;
     -c|--count)         opt_count='yes' ;;
     -v|--invert-match)  opt_invert='true';;
+    -i|--ignore-case)   regex_flags+='i';;
     --all|--any)        opt_junction="${1#--}";;
     --color|--colour)   jq_color='--color-output';;
     -H|--with-filename) opt_filename='yes';;
@@ -89,18 +94,10 @@ yes)  [ "$opt_count" = 'yes' ] || DIE "--with-filename is invalid without --coun
       ;;
 esac
 
-if [ "$opt_junction" = 'auto' ]
-then
-    if [ "$opt_invert" = 'yes' ]
-    then $opt_junction = 'any'
-    else $opt_junction = 'all'
-    fi
-fi
-
 read -r -d '' jq_filter <<-EOF || true
 def grep(regex):
     select(. != null | (if type == "string" then . else (.|tostring) end))
-        | test(regex) ;
+        | test(regex; "$regex_flags") ;
 select(
     [ $haystack ] | map(grep("$regex"))
         | if (length==0) then $opt_invert else $opt_junction != $opt_invert end
@@ -109,7 +106,7 @@ EOF
 
 if [ "$opt_nodeonly" = 'true' ]
 then
-    jq_filter+=" | [ $haystack | select( grep(\"$regex\"; $opt_invert) ) ]"
+    jq_filter+=" | [ $haystack | select( grep(\"$regex\") != $opt_invert) ) ]"
 fi
 
 run_jq_grep () {
@@ -117,7 +114,7 @@ run_jq_grep () {
     then
         echo "$jq_filter" >&2
     fi
-    # The bug https://github.com/stedolan/jq/issues/1139
+    # FIXME: The bug https://github.com/stedolan/jq/issues/1139
     # --exit-status doesn't really work for code 1 and 4
     if jq --exit-status "$jq_filter" "$@"
         ret=$?
@@ -133,7 +130,7 @@ run_jq_grep () {
 }
 
 run_jq_grep_count () {
-    # again, the bug https://github.com/stedolan/jq/issues/1139
+    # FIXME again, the bug https://github.com/stedolan/jq/issues/1139
     #run_jq_grep "$@" | jq -s 'length'
     #return ${PIPESTATUS[0]}
 
