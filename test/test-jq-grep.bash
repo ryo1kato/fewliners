@@ -33,8 +33,11 @@ assert 0 '2' $tgt --count -v 'foo'       '.list[].string'
 assert 0 '2' $tgt --count -v --any 'foo' '.list[].string'
 assert 0 '5' $tgt --count -v --all 'foo' '.list[].string'
 assert 1 '0' $tgt --count 'FOO'          '.list[].string'
-assert 0 '4' $tgt --ignore-case --count 'FOO' '.list[].string'
-assert 1 ''  $tgt 'NONEXISTENT' '.list[].string'
+assert 0 '4' $tgt --ignore-case --count    'FOO' '.list[].string'
+assert 0 '2' $tgt --ignore-case --count -v 'FOO' '.list[].string'
+assert 0 '4' $tgt --count 'foo'
+assert 1 ''  $tgt         'NONEXISTENT' '.list[].string'
+assert 1 '0' $tgt --count 'NONEXISTENT' '.list[].string'
 
 echo "Total Errors: $error"
 ((error == 0))

@@ -3,13 +3,17 @@ set -ue
 print_help () {
 cat <<EOF
 $(b Usage: ${0##*/}) [$(u OPTIONS)...] $(u REGEX) [$(u NODE)] [$(u FILE)...]
-    A $(b jq) wrapper to filter JSON objects with a $(u NODE) contains string that
-    matches with regex $(u REGEX). Supports (mostly) grep compatible $(b -c), $(b -v), $(b -H),
-    $(b -h), and $(b --color) options.
+    A $(b jq) wrapper to filter JSON objects with a node selected by a $(b jq)
+    selector $(u NODE) which contains a string that matches with regex $(u REGEX).
+    Supports (mostly) grep compatible $(b -c), $(b -v), $(b -i), $(b -H), $(b -h), and $(b --color) options.
+
+    If a second argument doesn't begin with a '.' (period), assume that the
+    argument is $(u FILE) and '.' is used for $(u NODE).
+    If $(u FILE) is not given or a '-', read from standard input.
 
 $(b OPTIONS)
   $(b -n, --node)
-      Print only the JSON nodes spedified with $(u NODE), instead of entire object.
+      Output only the JSON nodes spedified with $(u NODE), instead of entire object.
   $(b -c, --count)
       Suppress normal output; instead print a count of matching lines for each
       input file.  With the -v option  (see below), count non-matching lines.
@@ -21,8 +25,8 @@ $(b OPTIONS)
       Ignore case distinctions in both the $(u REGEX) and the input.
   $(b --any) - default
   $(b --all)
-      When there's multiple matching nodes in a object selected by $(u NODE), control
-      whether all or any of nodes must much (or not much) the pattern.
+      When there's multiple matching nodes in a object selected by $(u NODE),
+      control whether all or any of nodes must much (or not much) the pattern.
   $(b -H,--with-filename)
   $(b -h,--no-filename)
       If $(b -c) option is present, print or suppress the file name for each match.
@@ -44,7 +48,7 @@ ERROR () { echo "ERROR: $0: $*" >&2; }
 DIE () { ERROR "$*"; exit 1; }
 
 
-regex_flags='g'
+regex_flags=''
 opt_nodeonly='false'
 opt_invert='false'
 opt_count='no'
@@ -82,7 +86,28 @@ esac
 shift
 done
 
-[ $# -ge 2 ] || DIE "Too few arguments"
+# if second argument is none or doesn't start with '.'
+# use default selector: '.'.
+if [ $# -eq 0 ]
+then
+    DIE "Too few arguments"
+elif [ $# -eq 1 ]
+then
+    set -- "$1" '.'
+elif [ ${2:0:1} != '.' ]
+then
+    regex="$1"; shift
+    set -- "$regex" '.' "$@"
+fi
+
+# If reading from stdin and it's tty, probably it's not what a user wants.
+# Also note that we must use '||' instead of '-o' to avoid evaluation of "$3"
+# if the condition '$# -le 2'
+if [ -t 0 ] && ( [ $# -le 2 ] || [ "$3" = '-' ] )
+then
+    echo "WARNING: reading from stdin" >&2
+fi
+
 regex="$1"
 haystack="$2"
 shift 2
@@ -96,8 +121,9 @@ esac
 
 read -r -d '' jq_filter <<-EOF || true
 def grep(regex):
-    select(. != null | (if type == "string" then . else (.|tostring) end))
-        | test(regex; "$regex_flags") ;
+    select(. != null)
+        | if type == "string" then . else (.|tostring) end
+                | test(regex; "$regex_flags");
 select(
     [ $haystack ] | map(grep("$regex"))
         | if (length==0) then $opt_invert else $opt_junction != $opt_invert end
