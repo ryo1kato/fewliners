@@ -1,0 +1,6 @@
+{"id": 1, "list": [{"string": "foo1"}, {"string": "bar1"} ], "numbers": [1,2,3]}
+{"id": 2, "list": []}
+{"id": 3, "list": [{"string": "foo2"}, {"string": "bar2"} ], "numbers": [4,5,6]}
+{"id": 4, "list": [{"string": "foo3"}, {"string": "bar3"} ], "numbers": [4,5,6]}
+{"id": 5, "list": [{"string": "foo4"}, {"string": "foo5"} ], "numbers": [4,5,6]}
+{"id": 6, "list": [{"string": "baz"},  {"string": "quux"} ]}
