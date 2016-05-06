@@ -132,7 +132,7 @@ EOF
 
 if [ "$opt_nodeonly" = 'true' ]
 then
-    jq_filter+=" | [ $haystack | select( grep(\"$regex\") != $opt_invert) ) ]"
+    jq_filter+=" | [ $haystack | select( grep(\"$regex\") != $opt_invert) ]"
 fi
 
 run_jq_grep () {
