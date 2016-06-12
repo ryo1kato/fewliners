@@ -1,0 +1,3 @@
+#!/bin/bash
+[ -r "$1" ] || { echo "ERROR: $1 is not readable"; exit 1; }
+echo $HOSTNAME:$(readlink -f "$1")
