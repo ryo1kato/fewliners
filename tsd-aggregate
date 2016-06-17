@@ -1,79 +1,103 @@
 #!/bin/bash
-#
-# Aggregate timeseries data in 2-columns CSV format "TimeStamp.Float,Value"
-# to "TimeStamp.MilliSec,Count,Sum,Average"
-#
-
 set -ue
 
-# prevent overflow 2011-03-13 07:06.40 UTC
-epoch_offset=1300000000
-ms=10
-
 print_help () {
-echo "Usage: $0 [--ms=MILLI_SEC] [LOGFILE]";
-echo "Aggregate list of \"timestamp,value-pair\" (2-column CSV) to list of \"timesamp,N,Sum,Avg\" per 10 milli secconds"
+    cat <<-EOF
+	$(b ${0##*/}) [--ms=$(U MILLI_SEC)|--sec=$(u SECONDS)|--min=$(u MINUTES)] [$(u TIMESERIES_CSV)]
+	Aggregate timeseries data in 2-columns CSV format "TimeStamp, Value"
+	to "TimeStamp, Count, Sum, Average", bucketed by either $(u MILLISEC) or $(u SECONDS) or $(u MINUTES)
+	EOF
 }
 
-if [ $# -ge 1 ]
-then
+b () { tput bold; echo -n "$*"; tput sgr0; } # bold
+u () { tput smul; echo -n "$*"; tput rmul; } # underline
+
+###############################################################################
+trap 'echo "$0: Unexpected error at line $LINENO ($BASH_COMMAND, ret=$?)" >&2; exit 1;' ERR
+ERROR () { echo "ERROR: $0: $*" >&2; }
+DIE () { ERROR "$*"; exit 1; }
+
+
+interval_ms="10"
+set_interval_ms () {
+    interval="$2"
+    case $1 in
+        --ms)  interval_ms="$((interval))";;
+        --sec) interval_ms="$((interval * 1000))";;
+        --min) interval_ms="$((interval * 60000))";;
+    esac
+}
+
+while [ $# -ge 1 ]
+do
 case $1 in
-    -h|--help)
-        print_help
-        exit 0
-        ;;
-    -m|--ms)
+    -[^-][^-]*)
+        # expand '-abcd' to '-a -bcd' (and eventually '-a -b -c -d')
+        firstarg="$1"; shift
+        set -- "${firstarg:0:2}" "-${firstarg:2}" "$@"; continue;;
+    --*=*)
+        firstarg="$1"; shift;
+        set -- "${firstarg%%=*}" "${firstarg#*=}" "$@"; continue;;
+    -h|--help)    print_help; exit 0;;
+    --sec|--ms|--min)
         if [ $# -lt 2 ] || [[ ! $2 =~ [0-9]+ ]]
         then
             print_help
             exit 1
         else
-            ms=$2
-            shift 2
+            set_interval_ms "$1" "$2"
+            shift 1
         fi
         ;;
-    --ms=*)
-        ms=${1#--ms=}
-        shift 1
-        ;;
+    --) shift; break;;
+    -*) DIE "Unknown option '$1'";;
+    *) break;;
 esac
-fi
+shift
+done
 
-divide=$((1000/ms))
+
+# Offset the epoch to 2011-03-13 07:06.40 UTC, to prevent integer overflow.
+epoch_offset=1300000000
+
 
 cat "$@" | awk -F, "
 BEGIN {
-    epoch_offset=$epoch_offset
+    epoch_offset = $epoch_offset
+    interval_sec = $interval_ms/1000
     aggregate_count = 0
     sum = 0
 }
 /^[0-9]/ {
-    time = int( (\$1 - epoch_offset) * $divide )
+    time = (\$1 - epoch_offset)
     if ( aggregate_count == 0 ) {
-        start_time = time
+        aggregate_count = 1
+        start_time      = time
+        end_time        = start_time + interval_sec
     }
     if ( time < start_time ) {
         print \"[${0##*/}] ERROR: Input is not sorted by timestamp.\" > \"/dev/stderr\"
         exit 1
     }
-    if ( time == start_time ) {
+    if ( time < end_time ) {
         sum = sum+\$2
         aggregate_count++
     }
     else {
-        timestamp = epoch_offset + start_time/$divide
+        timestamp = epoch_offset + start_time
         printf(\"%.3f,%d,%f,%f\\n\",
                 timestamp,
                 aggregate_count,
                 sum,
                 sum / aggregate_count);
         sum=\$2
-        aggregate_count=1
-        start_time = time
+        aggregate_count = 1
+        start_time      = end_time
+        end_time        = start_time + interval_sec
     }
 }
 END {
-    timestamp = epoch_offset + start_time/$divide
+    timestamp = epoch_offset + start_time
     printf(\"%.3f,%d,%f,%f\\n\",
             timestamp,
             aggregate_count,
