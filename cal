@@ -37,6 +37,7 @@ esac
 cal_month_smart () {
     thisyear=$(date +%Y)
     thismonth=$(date +%m)
+    thismonth=${thismonth#0}
     month=$1
 
     diff=$((month - thismonth))
