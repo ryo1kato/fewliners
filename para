@@ -17,16 +17,18 @@ replaced with the content of the line.
 $(b OPTIONS)
 -j,--jobs=$(u NUM)     Run maximum $(u NUM) jobs in parallel (default=$opt_jobs).
 -h,--help         Print this help.
+-b,--buffered     Buffer all outputs from $(u COMMAND) before print to terminal.
+                  Prevents inter-mixed output, but needs as much RAM
 -o,--output=$(u FILE)  Redirect command output to $(u FILE)
                   If placeholder(s) $(b {}) is contained in $(u FILE),
                   output will be separated per commands, with $(b {}) substitued.
-                  Otherwise all outputs will be sent to one file name $(u FILE).
+                  Otherwise all outputs will be sent to one file $(u FILE).
 -e,--error        Immediately exit when observing any error.
                   Because commands are ran in parallel, this option doesn't
                   necessarily stop commands following the one failed from being
                   executed.
--v,--verbose      Print commands being executed to stderr.
--p,--print        Same as -v.
+-v,--verbose      Print command strings being executed to stderr.
+                  -vv will print start and end of command, with run time.
 $(b RETURN CODE)
   Exits with code 0 if all of the commands ran exitted successfully.
   Otherwise print number of commands exitted with non-zero code and
@@ -62,11 +64,14 @@ case $BASH_VERSION in
     ;;
 esac
 
-opt_verbose='no'
+
+opt_verbose=0
 opt_jobs=8
 opt_print='no'
 opt_error='no'
+opt_buffer='no'
 opt_output=''
+
 
 while [ $# -ge 1 ]
 do
@@ -80,11 +85,12 @@ case $1 in
     --*=*)
         firstarg="$1"; shift;
         set -- "${firstarg%%=*}" "${firstarg#*=}" "$@"; continue;;
-    -j|--jobs)                  opt_jobs="$2"; shift;;
-    -h|--help)                  print_help; exit 0;;
-    -o|--output)                opt_output="$2"; shift;;
-    -e|--error)                 opt_error='yes';;
-    -p|--print|-v|--verbose)    opt_print='yes';;
+    -j|--jobs)       opt_jobs="$2"; shift;;
+    -b|--buffered)     opt_buffer='yes';;
+    -h|--help)       print_help; exit 0;;
+    -o|--output)     opt_output="$2"; shift;;
+    -e|--error)      opt_error='yes';;
+    -v|--verbose)    let opt_verbose++ || true;;
     --) shift; break;;
     -*) DIE "Unknown option '$1'";;
     *) break;;
@@ -92,34 +98,22 @@ esac
 shift
 done
 
+
 output_per_command='no'
 case "$opt_output" in
     '')     : ;;
-    *'{}'*) output_per_command='yes';;
+    *'{}'*) output_per_command='yes'
+            opt_buffer='no'
+            ;;
     *)      touch $opt_output;;
 esac
-
-
-save_output () {
-    local line="$1"
-    local output="$2"
-    [ -n "$output" ] || return
-    if enabled $output_per_command
-    then
-        echo "$output" > "${opt_output//\{\}/$line}"
-    elif [ -n "$opt_output" ]
-    then
-        echo "$output" >> "$opt_output"
-    else
-        echo "$output"
-    fi
-}
 
 
 errors=0
 max_jobs=$opt_jobs
 (( max_jobs > 1 )) || max_jobs=1
 cmd=("$@")
+nth=1
 while IFS='' read -r line
 do
     if [ $errors -gt 0 -a $opt_error = 'yes' ]
@@ -145,15 +139,41 @@ do
         fi
     done
 
-    if enabled "$opt_print"; then
-        echo "${cmd[@]//\{\}/$line}" >&2
+    if (( opt_verbose > 0 )) ; then
+        echo "[$nth] ${cmd[@]//\{\}/$line}" >&2
     fi
     (
         set +e
-        output=$("${cmd[@]//\{\}/$line}" 2>&1); ret=$?
-        save_output "$line" "$output"
+        time_start=$SECONDS
+
+        if enabled $opt_buffer
+        then
+            # Note that if $output_per_command is 'yes', $opt_buffer is 'no'
+            output=$("${cmd[@]//\{\}/$line}"); ret=$?
+            if [ -n "$opt_output" ]
+            then
+                echo "$output" >> "$opt_output"
+            else
+                echo "$output"
+            fi
+        elif enabled $output_per_command
+        then
+            "${cmd[@]//\{\}/$line}" > "${opt_output//\{\}/$line}"; ret=$?
+        elif [ -n "$opt_output" ]
+        then
+            "${cmd[@]//\{\}/$line}" >> "${opt_output}"; ret=$?
+        else
+            "${cmd[@]//\{\}/$line}"; ret=$?
+        fi
+
+        time_end=$SECONDS
+        if (( opt_verbose > 1 )) ; then
+            echo "[$nth] ${cmd[@]//\{\}/$line} FINISHED in $((time_end - time_start)) secs" >&2
+        fi
         exit $ret
     ) &
+
+    let nth++
 done
 
 
@@ -183,4 +203,3 @@ then
 else
     exit 0
 fi
-
