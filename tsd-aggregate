@@ -3,9 +3,9 @@ set -ue
 
 print_help () {
     cat <<-EOF
-	$(b ${0##*/}) [--ms=$(U MILLI_SEC)|--sec=$(u SECONDS)|--min=$(u MINUTES)] [$(u TIMESERIES_CSV)]
+	$(b ${0##*/}) [--ms=$(u MILLI_SEC)|--sec=$(u SECONDS)|--min=$(u MINUTES)] [$(u TIMESERIES_CSV)]
 	Aggregate timeseries data in 2-columns CSV format "TimeStamp, Value"
-	to "TimeStamp, Count, Sum, Average", bucketed by either $(u MILLISEC) or $(u SECONDS) or $(u MINUTES)
+	to "TimeStamp, Count, Sum, Average", bucketed by $(u MILLISEC), $(u SECONDS), or $(u MINUTES)
 	EOF
 }
 
