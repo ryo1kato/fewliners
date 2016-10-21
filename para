@@ -130,7 +130,7 @@ case "$opt_output" in
         then
             touch > "$opt_output"
         else
-            printf > "$opt_output"
+            printf '' > "$opt_output"
         fi
 esac
 
@@ -197,7 +197,7 @@ launch_one_job () {
             then
                 touch > "$outfile"
             else
-                printf > "$outfile"
+                printf '' > "$outfile"
             fi
             "${cmd[@]//\{\}/$param}" >> "$outfile"
         elif [ -n "$opt_output" ]
