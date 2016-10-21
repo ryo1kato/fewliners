@@ -118,6 +118,7 @@ esac
 shift
 done
 
+[ $# -lt 1 ] && DIE "Too few arguments"
 
 output_per_command='no'
 case "$opt_output" in
@@ -188,7 +189,10 @@ launch_one_job () {
             then
                 echo "$output" >> "$opt_output"
             else
-                echo "$output"
+                if [ -n "$output" ]
+                then
+                    echo "$output"
+                fi
             fi
         elif enabled $output_per_command
         then
