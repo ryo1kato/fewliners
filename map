@@ -1,9 +1,14 @@
 #!/bin/bash
 set -ue
+trap 'echo "$0: Unexpected error at line $LINENO" >&2; exit 1;' ERR
+
+b () { tput bold; echo -n "$*"; tput sgr0; } # bold
+u () { tput smul; echo -n "$*"; tput rmul; } # underline
+
 print_help () {
 cat <<EOF
-Usage: ${0##*/} COMMAND ARGS...
-       ${0##*/} COMMAND OPTIONS -- ARGS...
+Usage: ${0##*/} $(u COMMAND) $(u ARGS...)
+       ${0##*/} $(u COMMAND) $(u OPTIONS[...]) -- $(u ARGS...)
        ${0##*/} --help
 Run COMMAND looping over ARGS.
 Equivalent to:
@@ -13,68 +18,20 @@ having an argument added to the end of OPTIONS:
     \$ for arg in ARGS...; do COMMAND \${OPTIONS//{}/\$arg}; done
 If separator '--' is omitted, all arguments after second one will be treated
 as arguments.
-OPTIONS
-  -h,--help     Print this help.
+$(b OPTIONS)
+  -h,--help           Print this help.
+  -j,--jobs=$(u NUM)  Run maximum NUM jobs in parallel (default=1).
+$(b NOTES)
+  This command is wrapper of $(b para -b --map -j1).
+  See $(b para --help) for more detail.
 EOF
 }
 
-#shopt -s extglob
-
-###############################################################################
-trap 'echo "$0: Unexpected error at line $LINENO ($BASH_COMMAND, ret=$?)" >&2; exit 1;' ERR
-ERROR () { echo "ERROR: $0: $*" >&2; }
-DIE () { ERROR "$*"; exit 1; }
-
-command=()
-while [ $# -ge 1 ]
-do
-case $1 in
-    -h|--help)
-        print_help
-        exit 0
-        ;;
-    --)
-        if [ $# -eq 1 ]
-        then
-            DIE "No argument after '$1'"
-        else
-            shift
-            break
-        fi
-        ;;
-    *)
-        command+=("$1")
-        ;;
-esac
-shift
-done
-
-if [ ${#command[@]} -le 1 ]
+if [ $# -eq 1 ]
 then
-    print_help
-    exit 1
+    case $1 in
+        -h|--help) print_help; exit 0 ;;
+    esac
 fi
 
-if [ $# -eq 0 ]
-then
-    # No delimitor; assuming only first argument is command part
-    # and all the rest are arguments to iterate over.
-    set -- "${command[@]}"
-    command=("$1")
-    shift
-fi
-
-
-case "${command[*]}" in
-*{}*)
-    for arg in "$@"
-    do
-        "${command[@]//\{\}/$arg}"
-    done;;
-*)
-    for arg in "$@"
-    do
-        "${command[@]}" "$arg"
-    done
-esac
-
+exec ${0%/*}/para -b --map -j1 "$@"
