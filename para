@@ -10,12 +10,16 @@ u () { tput smul; echo -n "$*"; tput rmul; } # underline
 
 print_help () {
 cat <<EOF
-Usage: ${0##*/} [$(u OPTIONS)...] $(u COMMAND) [$(u ARGS)] < $(u PARAM_FILE)
-A simpler GNU parallel like parallelizer implemented with Bash.
-For each line of $(u PARAM_FILE), run $(u COMMAND) [$(u ARGS)...] with $(b {})
-replaced with the content of the line.
+Usage: ${0##*/} [$(u OPTIONS)...] $(u COMMAND) [$(u ARG)...] < $(u PARAM_FILE)
+       ${0##*/} [$(u OPTIONS)...] --map $(u COMMAND) $(u PARAM)...]
+       ${0##*/} [$(u OPTIONS)...] --map $(u COMMAND) [$(u ARG)...] -- $(u PARAM)...]
+A simpler GNU parallel like shell command parallelizer, implemented with Bash.
+ For each line of $(u PARAM_FILE), run $(u COMMAND) [$(u ARG)...] with every occurrence of $(b {})
+ replaced with the content of the line. If $(u ARG) is ommited, single $(b {}) is assumed.
+ With $(b --map), use params from positional arguments after '--' instead of reading from stdin.
 $(b OPTIONS)
--j,--jobs=$(u NUM)     Run maximum $(u NUM) jobs in parallel (default=$opt_jobs).
+-j,--jobs=$(u NUM)     Run maximum $(u NUM) jobs in parallel
+                  (default is 1 for --map; othersize $opt_jobs).
 -h,--help         Print this help.
 -b,--buffered     Buffer all outputs from $(u COMMAND) before print to terminal.
                   Prevents inter-mixed output, but needs as much RAM
@@ -23,20 +27,32 @@ $(b OPTIONS)
                   If placeholder(s) $(b {}) is contained in $(u FILE),
                   output will be separated per commands, with $(b {}) substitued.
                   Otherwise all outputs will be sent to one file $(u FILE).
+-a,--append       Append, rather than overwrite, $(u FILE) with $(b --output) option
 -e,--error        Immediately exit when observing any error.
                   Because commands are ran in parallel, this option doesn't
                   necessarily stop commands following the one failed from being
                   executed.
 -v,--verbose      Print command strings being executed to stderr.
                   -vv will print start and end of command, with run time.
+$(b EXAMPLES)
+  Following five command lines are roughly equivalent:
+    $ for file in file1.zip file2.zip file3.zip; do unzip \$file; done
+    $ printf 'file1.zip$(b \\n)file2.zip$(b \\n)file3.zip$(b \\n)' | para unzip
+    $ printf 'file1.zip$(b \\n)file2.zip$(b \\n)file3.zip$(b \\n)' | para unzip {}
+    $ para --map unzip file1.zip file2.zip file3.zip
+    $ para --map unzip {} -- file1.zip file2.zip file3.zip
+  If you want to use redirect, pipe or other shell meta charactor / function,
+  quote as a single $(u ARG) and pass it to $(b sh -c):
+    $ para sh -c 'mycommand {} < {}-input.txt | grep keyword > {}-output.txt' \\
+          < param_list_file
 $(b RETURN CODE)
   Exits with code 0 if all of the commands ran exitted successfully.
-  Otherwise print number of commands exitted with non-zero code and
-  exits with code 1. For bash older than ver4.3, errors are ignored,
+  Otherwise print number of commands exitted with non-zero code to stderr,
+  and exits with code 1.  For bash older than ver4.3, errors are ignored,
   and as such, '--error' option doesn't work.
 $(b BUGS)
   Unlike GNU parallel, this command doesn't support reading from multiple
-  files or placeholder variants like {.}, {/}, {1}, {2}, etc.
+  files and placeholder variants like {.}, {/}, {1}, {2}, etc.
 EOF
 }
 
@@ -54,11 +70,11 @@ enabled () {
 bash_is_old='no';
 case $BASH_VERSION in
 [123].*|4.[012].*)
-    #if [ $BASH = /bin/bash -a -x /usr/local/bin/bash ]
-    #then
-    #    # MacOSX users might have newer version of bash in /usr/local
-    #    exec /usr/local/bin/bash "$0" "$@"
-    #fi
+    if [ $BASH = /bin/bash -a -x /usr/local/bin/bash ]
+    then
+        # MacOSX users might have newer version of bash in /usr/local/bin with brew
+        exec /usr/local/bin/bash "$0" "$@"
+    fi
     WARN "Your bash is too old ($BASH_VERSION). Errors will be ignored."
     bash_is_old='yes';
     ;;
@@ -68,8 +84,10 @@ esac
 opt_verbose=0
 opt_jobs=8
 opt_print='no'
+opt_append='no'
 opt_error='no'
 opt_buffer='no'
+opt_mapmode='no'
 opt_output=''
 
 
@@ -86,9 +104,11 @@ case $1 in
         firstarg="$1"; shift;
         set -- "${firstarg%%=*}" "${firstarg#*=}" "$@"; continue;;
     -j|--jobs)       opt_jobs="$2"; shift;;
-    -b|--buffered)     opt_buffer='yes';;
+    -b|--buffered)   opt_buffer='yes';;
+    --map)           opt_mapmode='yes';;
     -h|--help)       print_help; exit 0;;
     -o|--output)     opt_output="$2"; shift;;
+    -a|--append)     opt_append="$2"; shift;;
     -e|--error)      opt_error='yes';;
     -v|--verbose)    let opt_verbose++ || true;;
     --) shift; break;;
@@ -105,22 +125,19 @@ case "$opt_output" in
     *'{}'*) output_per_command='yes'
             opt_buffer='no'
             ;;
-    *)      touch $opt_output;;
+    *)
+        if enabled $opt_append
+        then
+            touch > "$opt_output"
+        else
+            printf > "$opt_output"
+        fi
 esac
 
-
-errors=0
 max_jobs=$opt_jobs
 (( max_jobs > 1 )) || max_jobs=1
-cmd=("$@")
-nth=1
-while IFS='' read -r line
-do
-    if [ $errors -gt 0 -a $opt_error = 'yes' ]
-    then
-        DIE "Exitting with an error, as --error option is given."
-    fi
 
+wait_for_lower_parallelism () {
     while true
     do
         jobs=($(jobs -p))
@@ -138,9 +155,26 @@ do
             fi
         fi
     done
+}
+
+
+############################################################################
+
+errors=0
+nth=1
+launch_one_job () {
+    local outfile
+    local param="$1"
+
+    wait_for_lower_parallelism
+
+    if [ $errors -gt 0 -a $opt_error = 'yes' ]
+    then
+        DIE "Exitting with an error, as --error option is given."
+    fi
 
     if (( opt_verbose > 0 )) ; then
-        echo "[$nth] ${cmd[@]//\{\}/$line}" >&2
+        echo "[$nth] ${cmd[@]//\{\}/$param}" >&2
     fi
     (
         set +e
@@ -149,7 +183,7 @@ do
         if enabled $opt_buffer
         then
             # Note that if $output_per_command is 'yes', $opt_buffer is 'no'
-            output=$("${cmd[@]//\{\}/$line}"); ret=$?
+            output=$("${cmd[@]//\{\}/$param}")
             if [ -n "$opt_output" ]
             then
                 echo "$output" >> "$opt_output"
@@ -158,26 +192,80 @@ do
             fi
         elif enabled $output_per_command
         then
-            "${cmd[@]//\{\}/$line}" > "${opt_output//\{\}/$line}"; ret=$?
+            outfile="${opt_output//\{\}/$param}"
+            if enabled $opt_append
+            then
+                touch > "$outfile"
+            else
+                printf > "$outfile"
+            fi
+            "${cmd[@]//\{\}/$param}" >> "$outfile"
         elif [ -n "$opt_output" ]
         then
-            "${cmd[@]//\{\}/$line}" >> "${opt_output}"; ret=$?
+            "${cmd[@]//\{\}/$param}" >> "${opt_output}"
         else
-            "${cmd[@]//\{\}/$line}"; ret=$?
+            "${cmd[@]//\{\}/$param}"
         fi
+        ret=$?
 
         time_end=$SECONDS
         if (( opt_verbose > 1 )) ; then
-            echo "[$nth] ${cmd[@]//\{\}/$line} FINISHED in $((time_end - time_start)) secs" >&2
+            echo "[$nth] ${cmd[@]//\{\}/$param} FINISHED in $((time_end - time_start)) secs" >&2
         fi
         exit $ret
     ) &
 
     let nth++
-done
+}
 
 
-# This waits for all remaining jobs and return zero.
+if enabled $opt_mapmode
+then
+    cmd=()
+
+    while [ $# -gt 0 ]
+    do
+        case $1 in
+            --) shift; break;;
+            *) cmd+=("$1")
+        esac
+        shift
+    done
+
+    if [ $# -eq 0 ]
+    then
+        # No -- delimitor; assuming only first argument is command part
+        # and all the rest are arguments to iterate over.
+        set "${cmd[@]}"
+        cmd=("$1")
+        shift
+    fi
+    parameters=("$@")
+else
+    cmd=("$@")
+fi
+
+case "${cmd[*]}" in
+    *{}*) : ;;
+    *) cmd+=('{}');;
+esac
+
+if enabled $opt_mapmode
+then
+    for param in "${parameters[@]}"
+    do
+        launch_one_job "$param"
+    done
+else
+    while IFS='' read -r line
+    do
+        launch_one_job "$line"
+    done
+fi
+
+
+
+# This waits for any remaining job.
 if enabled "$bash_is_old"
 then
     wait
