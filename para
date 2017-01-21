@@ -141,6 +141,7 @@ max_jobs=$opt_jobs
 wait_for_lower_parallelism () {
     while true
     do
+        jobs > /dev/null # work around mysterious bug for bash < 4.1
         jobs=($(jobs -p))
         nr_jobs=${#jobs[@]}
         if (( max_jobs > nr_jobs ))
