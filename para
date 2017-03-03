@@ -129,9 +129,9 @@ case "$opt_output" in
     *)
         if enabled $opt_append
         then
-            touch > "$opt_output"
+            touch "${opt_output}"
         else
-            printf '' > "$opt_output"
+            install -D /dev/null "${opt_output}"
         fi
 esac
 
@@ -200,9 +200,9 @@ launch_one_job () {
             outfile="${opt_output//\{\}/$param}"
             if enabled $opt_append
             then
-                touch > "$outfile"
+                touch "$outfile"
             else
-                printf '' > "$outfile"
+                install -D /dev/null "$outfile"
             fi
             "${cmd[@]//\{\}/$param}" >> "$outfile"
         elif [ -n "$opt_output" ]
