@@ -131,7 +131,7 @@ case "$opt_output" in
         then
             touch "${opt_output}"
         else
-            install -D /dev/null "${opt_output}"
+            install -m 644 -D /dev/null "${opt_output}"
         fi
 esac
 
