@@ -202,7 +202,7 @@ launch_one_job () {
             then
                 touch "$outfile"
             else
-                install -D /dev/null "$outfile"
+                install -m 644 -D /dev/null "$outfile"
             fi
             "${cmd[@]//\{\}/$param}" >> "$outfile"
         elif [ -n "$opt_output" ]
