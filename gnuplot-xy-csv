@@ -11,8 +11,13 @@ Usage: ${0##*/} [OPTIONS...] [CSV_FILE...]
   GNU Plot wrapper for two-column CSV files.
   If no CSV_FILE argument is given, try to read from stdin.
 OPTIONS
-  -o,--output=FILE Output to FILE in PNG format.
-  -h,--help        Print this help.
+  -o,--output=FILE     Output to FILE in PNG format.
+  -t,--terminal=TERM   Set terminal type.
+  -s,--setting=STRING  Additional gnuplot commands.
+  -h,--help            Print this help.
+EXAMPLE
+  cat data.csv | gnuplot-xy-csv
+  gnuplot-xy-csv -s 'set yrange [0:36]' *.csv
 EOF
 }
 
@@ -24,7 +29,7 @@ DIE () { ERROR "$*"; exit 1; }
 opt_input="-" # default is stdin
 opt_output="" # default is screen
 opt_terminal=""
-opt_verbose='no'
+opt_setting=""
 while [ $# -ge 1 ]
 do
 case $1 in
@@ -36,6 +41,7 @@ case $1 in
         firstarg="$1"; shift;
         set -- "${firstarg%%=*}" "${firstarg#*=}" "$@"; continue;;
     -o|--output)  opt_output="$2"; shift;;
+    -s|--setting) opt_setting=$2; shift;;
     -t|--terminal) opt_terminal="$2"; shift;;
     -h|--help)    print_help; exit 0;;
     --) shift; break;;
@@ -64,5 +70,5 @@ do
     plotargs+="'$file' using '%lf,%lf' title '$file',"
 done
 
-gnuplot $persist -e "${opt_terminal:+"set terminal $opt_terminal;"}${opt_output:+"set terminal png; set output '$opt_output';"}; plot ${plotargs[*]%,}"
+gnuplot $persist -e "${opt_setting:+"$opt_setting;"}${opt_terminal:+"set terminal $opt_terminal;"}${opt_output:+"set terminal png; set output '$opt_output';"}; plot ${plotargs[*]%,}"
 
