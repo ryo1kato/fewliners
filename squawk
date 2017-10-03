@@ -1,0 +1,68 @@
+#!/bin/bash
+print_help () {
+cat <<EOF
+Usage: $(b ${0##*/}) [-F fs] [-v var=value] $(u CODE) [$(u END_CODE)] [$(u FILES)]
+An awk wrapper to save few key types if you just want to do something like
+$(b awk \'{print \$1*\$2}\'); you can just type $(b ${0##*/} \'\$1*\$2\')
+If there is no "print" or ";" in the code block, this wrapper will prefix "print"
+in the code block.
+Otherwise it passes the code block to awk as-is, surrounding with a pair of '{}'
+When this script is executed as '$(b ,squawk)' (preceding comma), it assumes option '$(b -F,)' awk.
+EOF
+}
+
+b () { tput bold; echo -n "$*"; tput sgr0; } # bold
+u () { tput smul; echo -n "$*"; tput rmul; } # underline
+
+trap 'echo "$0: Unexpected error at line $LINENO ($BASH_COMMAND, ret=$?)" >&2; exit 1;' ERR
+ERROR () { echo "ERROR: $0: $*" >&2; }
+DIE () { ERROR "$*"; exit 1; }
+
+###############################################################################
+
+awkopts=(awk)
+if [[ ${0##*/} =~ ^, ]]
+then
+    awkopts+=(-F,)
+fi
+
+while [ $# -ge 1 ]
+do
+case $1 in
+    -[Fv])  awkopts+=($1 $2); shift;;
+    -F*)    awkopts+=($1);;
+    -h|--help)    print_help; exit 0;;
+    --) shift; break;;
+    -*) DIE "Unknown option '$1'";;
+    *) break;;
+esac
+shift
+done
+
+
+if (( $# < 1 ))
+then
+    DIE "Not enough arguments"
+fi
+
+code="$1"
+shift
+case $code in
+    print|';')  awkCode="{ $code }" ;;
+    *)          awkCode="{ print $code }" ;;
+esac
+
+
+if (( $# >= 1 ))
+then
+    if [ -e $1 ]
+    then
+        # if 2nd arg is a filename, just pass through to awk
+        : nothing
+    else
+        awkCode="${awkCode} END { ${1} }"
+        shift
+    fi
+fi
+
+"${awkopts[@]}" "${awkCode}" "$@"
