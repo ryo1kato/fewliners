@@ -7,7 +7,8 @@ $(b awk \'{print \$1*\$2}\'); you can just type $(b ${0##*/} \'\$1*\$2\')
 If there is no "print" or ";" in the code block, this wrapper will prefix "print"
 in the code block.
 Otherwise it passes the code block to awk as-is, surrounding with a pair of '{}'
-When this script is executed as '$(b ,squawk)' (preceding comma), it assumes option '$(b -F,)' awk.
+When this script is executed as '$(b ,squawk)' (preceding comma), it assumes options
+'$(b -F, -v OFS=,)' (input and output field separator set to , for CSV files).
 EOF
 }
 
@@ -21,9 +22,10 @@ DIE () { ERROR "$*"; exit 1; }
 ###############################################################################
 
 awkopts=(awk)
+opt_debug='no'
 if [[ ${0##*/} =~ ^, ]]
 then
-    awkopts+=(-F,)
+    awkopts+=(-F, -v OFS=,)
 fi
 
 while [ $# -ge 1 ]
@@ -32,6 +34,7 @@ case $1 in
     -[Fv])  awkopts+=($1 $2); shift;;
     -F*)    awkopts+=($1);;
     -h|--help)    print_help; exit 0;;
+    --debug) opt_debug='yes';;
     --) shift; break;;
     -*) DIE "Unknown option '$1'";;
     *) break;;
@@ -48,14 +51,16 @@ fi
 code="$1"
 shift
 case $code in
-    print|';')  awkCode="{ $code }" ;;
-    *)          awkCode="{ print $code }" ;;
+    *print[^A-Za-z]*|*';'*)
+        awkCode="{ $code }" ;;
+    *)
+        awkCode="{ print $code }" ;;
 esac
 
 
 if (( $# >= 1 ))
 then
-    if [ -e $1 ]
+    if [ -e "$1" ]
     then
         # if 2nd arg is a filename, just pass through to awk
         : nothing
@@ -65,4 +70,8 @@ then
     fi
 fi
 
+if [ "$opt_debug" = 'yes' ]
+then
+    echo "${awkopts[@]}" "${awkCode}" "$@" >&2
+fi
 "${awkopts[@]}" "${awkCode}" "$@"
