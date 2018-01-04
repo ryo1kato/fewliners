@@ -82,6 +82,11 @@ case $BASH_VERSION in
 esac
 
 
+############################################################################
+##
+## Commandline Parser
+##
+
 opt_verbose=0
 opt_jobs=${PARA_JOBS:-8}
 opt_print='no'
@@ -139,6 +144,67 @@ esac
 max_jobs=$opt_jobs
 (( max_jobs > 1 )) || max_jobs=1
 
+
+
+
+############################################################################
+##
+## Interruption and Termination Handling
+##
+
+
+kids_comma () {
+    jobs -p | tr '\n' ',' | sed -e 's/,$//'
+}
+
+grandkids () {
+    kids=$(kids_comma)
+    if [ -n "$kids" ]
+    then
+        pgrep -d ' ' -P $kids || true
+    fi
+}
+
+kill_grandkids () {
+    kids=$(kids_comma)
+    if [ -n "$kids" ]
+    then
+        pkill "$@" -P $(kids_comma) $kids || true
+    fi
+}
+
+
+interrupted='no'
+term_and_wait_jobs () {
+    trap 'echo "Sending SIGKILL to ..."; kill_grandkids -KILL' QUIT
+    trap - INT TERM
+
+    #kill_grandkids
+
+    sleep 1
+    if [ -n "$(jobs -p)" ]
+    then
+        local rem_jobs=($(jobs -p))
+        WARN "You still have ${#rem_jobs[@]} jobs running. (${rem_jobs[@]})"
+        cat /proc/$rem_jobs/cmd
+        WARN "Hit $(b Ctrl-C) again to exit without waiting. $(b Ctrl-\\) to send SIGKILL to all descendants."
+    fi
+
+    while [ -n "$(jobs -p)" ]
+    do
+        wait
+    done
+    WARN "All jobs and subprocesses exitted."
+    exit 1
+}
+
+#trap 'WARN "Interrupted"; interrupted=yes' INT TERM
+
+############################################################################
+##
+## The Parallelizer
+##
+
 wait_for_lower_parallelism () {
     while true
     do
@@ -161,8 +227,6 @@ wait_for_lower_parallelism () {
 }
 
 
-############################################################################
-
 errors=0
 nth=1
 launch_one_job () {
@@ -170,6 +234,12 @@ launch_one_job () {
     local param="$1"
 
     wait_for_lower_parallelism
+
+    #if [ $interrupted = yes ]
+    #then
+    #    term_and_wait_jobs
+    #    exit 1
+    #fi
 
     if [ $errors -gt 0 -a $opt_error = 'yes' ]
     then
