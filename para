@@ -14,27 +14,30 @@ Usage: ${0##*/} [$(u OPTIONS)...] $(u COMMAND) [$(u ARG)...] < $(u PARAM_FILE)
        ${0##*/} [$(u OPTIONS)...] --map $(u COMMAND) $(u PARAM)...]
        ${0##*/} [$(u OPTIONS)...] --map $(u COMMAND) [$(u ARG)...] -- $(u PARAM)...]
 A simpler GNU parallel like shell command parallelizer, implemented with Bash.
- For each line of $(u PARAM_FILE), run $(u COMMAND) [$(u ARG)...] with every occurrence of $(b {})
- replaced with the content of the line. If $(u ARG) is ommited, single $(b {}) is assumed.
- With $(b --map), use params from positional arguments after '--' instead of reading from stdin.
+For each line of $(u PARAM_FILE), run $(u COMMAND) [$(u ARG)...] with every occurrence of placeholders ($(b {}) etc.) replaced with the content of the line. If $(u ARG) is ommited, single $(b {}) is assumed. With $(b --map), use params from positional arguments after '--' instead of reading from stdin.
 $(b OPTIONS)
--j,--jobs=$(u NUM)     Run maximum $(u NUM) jobs in parallel
-                  default is 1 for --map; othersize $opt_jobs.
-                  You can override the default with $(u \$PARA_JOBS) env variable.)
--h,--help         Print this help.
--b,--buffered     Buffer all outputs from $(u COMMAND) before print to terminal.
-                  Prevents inter-mixed output, but needs as much RAM
+-j,--jobs=$(u NUM) Run maximum $(u NUM) jobs in parallel.
+              default is 1 for --map; othersize $opt_jobs.
+              You can override the default with $(u \$PARA_JOBS) env variable.
+-b,--buffered Buffer all outputs from $(u COMMAND) before print to terminal.
+              Prevents inter-mixed output, but needs as much RAM.
 -o,--output=$(u FILE)  Redirect command output to $(u FILE)
-                  If placeholder(s) $(b {}) is contained in $(u FILE),
-                  output will be separated per commands, with $(b {}) substitued.
-                  Otherwise all outputs will be sent to one file $(u FILE).
--a,--append       Append, rather than overwrite $(u FILE).
--e,--error        Immediately exit when $(b observing) any error.
-                  Because commands are ran in parallel, this option doesn't
-                  necessarily stop commands following the one failed from being
-                  executed.
--v,--verbose      Print command strings being executed to stderr.
-                  -vv will print start and end of command, with run time.
+              If placeholder ($(b {}) etc.) is contained in $(u FILE), output
+              will be separated per commands, with placeholders substitued.
+              Otherwise all outputs will be sent to one file $(u FILE).
+-a,--append   Append, rather than overwriting $(u FILE).
+-e,--error    Immediately exit when $(b observing) any error. Because commands
+              are ran in parallel, option doesn't necessarily stop commands
+              following a failed one from being executed.
+-h,--help     Print this help.
+-v,--verbose  Print command strings being executed to stderr.
+              -vv will print start and end of command, with run time.
+$(b PLACEHOLDERS)
+  {}    Input line.
+  {.}   Input line without extension.
+  {/}   Basename of input line.
+  {//}  Dirname of input line.
+  {/.}  Basename of input line without extension.
 $(b EXAMPLES)
   Following five command lines are roughly equivalent:
     $ for file in file1.zip file2.zip file3.zip; do unzip \$file; done
@@ -51,9 +54,6 @@ $(b RETURN CODE)
   Otherwise print number of commands exitted with non-zero code to stderr,
   and exits with code 1.  For bash older than ver4.3, errors are ignored,
   and as such, '--error' option doesn't work.
-$(b BUGS)
-  Unlike GNU parallel, this command doesn't support reading from multiple
-  files and placeholder variants like {.}, {/}, {1}, {2}, etc.
 EOF
 }
 
@@ -129,7 +129,8 @@ done
 output_per_command='no'
 case "$opt_output" in
     '')     : ;;
-    *'{}'*) output_per_command='yes'
+    *'{}'*|*'{.}'*|*'{/}'*|*'{//}'*|*'{/.}'*)
+            output_per_command='yes'
             opt_buffer='no'
             ;;
     *)
@@ -231,7 +232,13 @@ errors=0
 nth=1
 launch_one_job () {
     local outfile
-    local param="$1"
+    local param="$1"                 # {}   Input line.
+    local param_noext=${param%.*}    # {.}  Input line without extension.
+    local param_base=${param##*/}    # {/}  Basename of input line.
+    local param_dirname=${param%/*}  # {//} Dirname of input line.
+    local param_base_noext=${param_base%.*} # {/.}  Basename of input line w/o extension.
+    shift
+    local cmd=("$@")
 
     wait_for_lower_parallelism
 
@@ -241,13 +248,19 @@ launch_one_job () {
     #    exit 1
     #fi
 
+    cmd=("${cmd[@]//\{\}/$param}")
+    cmd=("${cmd[@]//\{.\}/$param_noext}")
+    cmd=("${cmd[@]//\{\/\}/$param_base}")
+    cmd=("${cmd[@]//\{\/\/\}/$param_dirname}")
+    cmd=("${cmd[@]//\{\/.\}/$param_base_noext}")
+
     if [ $errors -gt 0 -a $opt_error = 'yes' ]
     then
         DIE "Exitting with an error, as --error option is given."
     fi
 
     if (( opt_verbose > 0 )) ; then
-        echo "[$nth] ${cmd[@]//\{\}/$param}" >&2
+        echo "[$nth] ${cmd[*]}" >&2
     fi
     (
         set +e
@@ -256,7 +269,7 @@ launch_one_job () {
         if enabled $opt_buffer
         then
             # Note that if $output_per_command is 'yes', $opt_buffer is 'no'
-            output=$("${cmd[@]//\{\}/$param}")
+            output=$("${cmd[@]}")
             if [ -n "$opt_output" ]
             then
                 echo "$output" >> "$opt_output"
@@ -269,24 +282,29 @@ launch_one_job () {
         elif enabled $output_per_command
         then
             outfile="${opt_output//\{\}/$param}"
+            outfile="${outfile//\{\}/$param}"
+            outfile="${outfile//\{.\}/$param_noext}"
+            outfile="${outfile//\{/\}/$param_base}"
+            outfile="${outfile//\{//\}/$param_dirname}"
+            outfile="${outfile//\{/.\}/$param_base_noext}"
             if enabled $opt_append
             then
                 touch "$outfile"
             else
                 install -m 644 -D /dev/null "$outfile"
             fi
-            "${cmd[@]//\{\}/$param}" >> "$outfile"
+            "${cmd[@]}" >> "$outfile"
         elif [ -n "$opt_output" ]
         then
-            "${cmd[@]//\{\}/$param}" >> "${opt_output}"
+            "${cmd[@]}" >> "${opt_output}"
         else
-            "${cmd[@]//\{\}/$param}"
+            "${cmd[@]}"
         fi
         ret=$?
 
         time_end=$SECONDS
         if (( opt_verbose > 1 )) ; then
-            echo "[$nth] ${cmd[@]//\{\}/$param} FINISHED in $((time_end - time_start)) secs" >&2
+            echo "[$nth] ${cmd[@]} FINISHED in $((time_end - time_start)) secs" >&2
         fi
         exit $ret
     ) &
@@ -322,7 +340,7 @@ else
 fi
 
 case "${cmd[*]}" in
-    *{}*) : ;;
+    *'{}'*|*'{.}'*|*'{/}'*|*'{//}'*|*'{/.}'*) : ;;
     *) cmd+=('{}');;
 esac
 
@@ -330,12 +348,12 @@ if enabled $opt_mapmode
 then
     for param in "${parameters[@]}"
     do
-        launch_one_job "$param"
+        launch_one_job "$param" "${cmd[@]}"
     done
 else
     while IFS='' read -r line
     do
-        launch_one_job "$line"
+        launch_one_job "$line" "${cmd[@]}"
     done
 fi
 
