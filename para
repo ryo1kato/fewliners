@@ -19,7 +19,8 @@ A simpler GNU parallel like shell command parallelizer, implemented with Bash.
  With $(b --map), use params from positional arguments after '--' instead of reading from stdin.
 $(b OPTIONS)
 -j,--jobs=$(u NUM)     Run maximum $(u NUM) jobs in parallel
-                  (default is 1 for --map; othersize $opt_jobs).
+                  default is 1 for --map; othersize $opt_jobs.
+                  You can override the default with $(u \$PARA_JOBS) env variable.)
 -h,--help         Print this help.
 -b,--buffered     Buffer all outputs from $(u COMMAND) before print to terminal.
                   Prevents inter-mixed output, but needs as much RAM
@@ -27,8 +28,8 @@ $(b OPTIONS)
                   If placeholder(s) $(b {}) is contained in $(u FILE),
                   output will be separated per commands, with $(b {}) substitued.
                   Otherwise all outputs will be sent to one file $(u FILE).
--a,--append       Append, rather than overwrite, $(u FILE) with $(b --output) option
--e,--error        Immediately exit when observing any error.
+-a,--append       Append, rather than overwrite $(u FILE).
+-e,--error        Immediately exit when $(b observing) any error.
                   Because commands are ran in parallel, this option doesn't
                   necessarily stop commands following the one failed from being
                   executed.
@@ -82,7 +83,7 @@ esac
 
 
 opt_verbose=0
-opt_jobs=8
+opt_jobs=${PARA_JOBS:-8}
 opt_print='no'
 opt_append='no'
 opt_error='no'
