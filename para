@@ -284,9 +284,9 @@ launch_one_job () {
             outfile="${opt_output//\{\}/$param}"
             outfile="${outfile//\{\}/$param}"
             outfile="${outfile//\{.\}/$param_noext}"
-            outfile="${outfile//\{/\}/$param_base}"
-            outfile="${outfile//\{//\}/$param_dirname}"
-            outfile="${outfile//\{/.\}/$param_base_noext}"
+            outfile="${outfile//\{\/\}/$param_base}"
+            outfile="${outfile//\{\/\/\}/$param_dirname}"
+            outfile="${outfile//\{\/.\}/$param_base_noext}"
             if enabled $opt_append
             then
                 touch "$outfile"
