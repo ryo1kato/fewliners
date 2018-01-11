@@ -98,9 +98,11 @@ BEGIN {
 }
 END {
     timestamp = epoch_offset + start_time
-    printf(\"%.3f,%d,%f,%f\\n\",
-            timestamp,
-            aggregate_count,
-            sum,
-            sum / aggregate_count);
+    if ( aggregate_count > 0 ) {
+        printf(\"%.3f,%d,%f,%f\\n\",
+                timestamp,
+                aggregate_count,
+                sum,
+                sum / aggregate_count);
+    }
 }"
