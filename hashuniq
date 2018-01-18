@@ -19,7 +19,7 @@ parser.add_argument('-u', '--uniq', action='store_true',
 parser.add_argument('-C', '--CSV', action='store_true',
         help='With -c option, out put result in CSV format, with count on the right')
 parser.add_argument('-p', '--percent', action='store_true',
-        help='Print % of occurence rather than raw count (count/total_lines*100)')
+        help='Print %% of occurence rather than raw count (count/total_lines*100)')
 parser.add_argument('filename', metavar='FILE', type=str, nargs='?',
         help='Input filename. If omitted, read from standard input.')
 
