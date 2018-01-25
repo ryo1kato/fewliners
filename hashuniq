@@ -16,7 +16,7 @@ parser.add_argument('-d', '--dup', action='store_true',
         help='only output lines with duplicates in the input.')
 parser.add_argument('-u', '--uniq', action='store_true',
         help='Only output lines without duplicates in the input.')
-parser.add_argument('-C', '--CSV', action='store_true',
+parser.add_argument('-C', '--csv', action='store_true',
         help='With -c option, out put result in CSV format, with count on the right')
 parser.add_argument('-p', '--percent', action='store_true',
         help='Print %% of occurence rather than raw count (count/total_lines*100)')
@@ -49,14 +49,14 @@ def main(args):
                 sorted_counter.reverse()
             f = "{l}"
             if args.count:
-                if args.CSV:
+                if args.csv:
                     f = f + ",{c}"
                 else:
                     maxdigits = len(str(max(counter.values())))
                     f = "{c:" + str(maxdigits) + "d} " + f
             if args.percent:
-                if args.CSV:
-                    f = f + ",{p:5.2f}%"
+                if args.csv:
+                    f = f + ",{p:.2f}%"
                 else:
                     f = "{p:5.2f}% " + f
             f = f + '\n'
@@ -98,7 +98,7 @@ if __name__ == '__main__':
         main(args)
     except KeyboardInterrupt:
         sys.exit(0)
-    except IOError, e:
+    except IOError as e:
         import errno
         if e.errno == errno.EPIPE:
             sys.exit(0)
