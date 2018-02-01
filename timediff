@@ -49,13 +49,13 @@ for timestr in timestr_array:
             diff = -diff
 
         if args.unit[0] == 's':
-            print diff.total_seconds()
+            print(diff.total_seconds())
         elif args.unit[0] == 'm':
-            print "%.2f" % (diff.total_seconds() / 60)
+            print("%.2f" % (diff.total_seconds() / 60))
         elif args.unit[0] == 'h':
-            print "%.2f" % (diff.total_seconds() / (60*60))
+            print("%.2f" % (diff.total_seconds() / (60*60)))
         elif args.unit[0] == 'd':
-            print diff.days
+            print(diff.days)
         else:
             sys.stderr.write("Unknown time unit: %s\n" % args.unit)
             sys.exit(1)
