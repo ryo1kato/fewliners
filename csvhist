@@ -1,0 +1,162 @@
+#!/usr/bin/env python
+
+desc="Plot histogram from CSV file"
+
+import argparse
+import sys, os
+import re
+import math
+import numpy as np
+import pandas as pd
+import gzip
+import shutil
+
+BARCHAR='*'
+SEP=' | '
+TERM_HEIGHT_MARGIN=5
+ASCIIFMT="{{b:{bfmt}}}"+SEP+"{{c:{cd}d}}"+SEP[:-1]+"{{p:6.2f}}%"
+CSVFMT="{b:.4f},{c},{p:.4f}"
+
+
+parser = argparse.ArgumentParser(description=desc)
+parser.add_argument('filename', metavar='FILE', type=str, nargs='?', help="hoge") #argparse.SUPPRESS)
+parser.add_argument('-d', metavar='DELIM', default=',',
+        help='Use DELIM as a input field separator. (default=",")')
+parser.add_argument('-c', '--column', metavar='FIELD', default=None, type=int,
+        help='Column number to compute histogram from (default: rightmost column)')
+parser.add_argument('-b', '--bins', metavar='NUM', default=None, type=int,
+        help='Number of bins (default: use terminal height)')
+parser.add_argument('--csv', default=False, action='store_true',
+        help='Output in CSV formmat. Implies -B')
+parser.add_argument('-B', '--no-bar', default=False, action='store_true',
+        help='Do not display histogram bar')
+parser.add_argument('-l', '--log-bar', default=False, action='store_true',
+        help='logarithmic bar size.')
+parser.add_argument('-L', '--log-bucket', default=False, action='store_true',
+        help='logarithmic backet.')
+parser.add_argument('--min', metavar='MIN', default=None, type=float,
+        help='clip the data with MIN')
+parser.add_argument('--max', metavar='MAX', default=None, type=float,
+        help='clip the data with MAX')
+parser.add_argument('-p', '--percentile', default=False, action='store_true',
+        help='Show cummulative percent (percentile value) instead of percent per bucket')
+
+
+def open_and_read_file(fname=None):
+    if fname:
+        if fname.endswith('.gz'):
+            f = gzip.open(fname)
+        else:
+            f = open(fname)
+    else:
+        f = sys.stdin
+    return pd.read_csv(f)
+
+
+def zeros(f):
+    '''count number of zeros after dicimal point for a float.
+    zeros(1.001234) -> 0
+    zeros(0.123) -> 0
+    zeros(0.0001234) -> 3
+    '''
+    if f >= 1.0:
+        return 0
+    else:
+        s = "{:f}".format(f)[2:]
+        z = 0
+        for d in s:
+            if d == '0':
+                z += 1
+            else:
+                break
+        return z
+
+
+def main(args):
+    df = open_and_read_file(args.filename)
+
+    if args.column:
+        nth = args.column
+        if nth > len(df.columns):
+            sys.stderr.write("Invalid column position {} for --column; the data contains only {} columns\n".format(nth, len(df.columns)))
+            sys.exit(1)
+    else:
+        nth = len(df.columns)
+    data = df.iloc[:,[nth-1]]
+
+    if args.max:
+        range_max = args.max
+    else:
+        range_max = data.values.max()
+
+    if args.min:
+        range_min = args.min
+    else:
+        range_min = data.values.min()
+
+    # defaults to 80x24
+    termsize = shutil.get_terminal_size()
+    if args.bins:
+        bins = args.bins
+    else:
+        bins = termsize.lines - TERM_HEIGHT_MARGIN
+
+    if args.log_bucket:
+        if range_max <= 0:
+            sys.stderr("ERROR: Cannot use --log-bucket for negative value data\n")
+            sys.exit(1)
+        if range_min <= 0:
+            sys.stderr.write("WARNING: minimum value {} is not positive. Clipping at {}\n".format(range_min,range_max/1000000.0))
+            range_min = range_max / 1000000.0
+        bins = np.logspace(np.log10(range_min), np.log10(range_max), bins)
+    hist, edges = np.histogram(data, bins=bins, range=(range_min,range_max))
+    total = sum(hist)
+
+    if args.csv:
+        fmt = CSVFMT
+    else:
+        cnt_digits = len(str(max(hist)))
+        int_digits = max(len(str(int(edges[ 1]))),
+                         len(str(int(edges[-1]))))
+        mindiff = min(np.diff(edges[1:]))
+        if mindiff < 0.0001:
+            digits = max([len("{:.5g}".format(b)) for b in edges[1:]])
+            bfmt = "{:d}.5g".format(digits)
+        elif mindiff >= 1:
+            bfmt = "{:d}.0f".format(int_digits)
+        else:
+            z = zeros(mindiff)
+            bfmt = "{:d}.{:d}f".format(int_digits+z+2, z+1)
+        fmt = ASCIIFMT.format(bfmt=bfmt, cd=cnt_digits)
+
+    barmax = termsize.columns - len(fmt.format(b=1,c=1,p=1)) - len(SEP)
+
+    maxcount = max(hist)
+    if args.log_bar:
+        maxlog = np.log10(maxcount)
+        minlog = np.log10(max(1.0,min(hist)))
+
+    if args.percentile:
+        percent = hist.cumsum() / float(total) * 100.
+    else:
+        percent = hist / float(total) * 100.
+
+    for b, c, pct in zip(edges[1:], hist, percent):
+        if args.no_bar or args.csv:
+            bar = ''
+        else:
+            if args.log_bar:
+                if c == 0:
+                    barsize = 0
+                else:
+                    barclip = (np.log10(c) - minlog) / (maxlog - minlog)
+                    barsize = max(1, int(barmax * barclip))
+            else:
+                barsize = int(barmax * c/maxcount)
+            bar = SEP + BARCHAR*barsize
+        print(fmt.format(b=b,c=c,p=pct) + bar)
+
+
+if __name__ == '__main__':
+    main(parser.parse_args(sys.argv[1:]))
+
