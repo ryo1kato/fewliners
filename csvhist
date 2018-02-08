@@ -17,10 +17,9 @@ TERM_HEIGHT_MARGIN=5
 ASCIIFMT="{{b:{bfmt}}}"+SEP+"{{c:{cd}d}}"+SEP[:-1]+"{{p:6.2f}}%"
 CSVFMT="{b:.4f},{c},{p:.4f}"
 
-
 parser = argparse.ArgumentParser(description=desc)
-parser.add_argument('filename', metavar='FILE', type=str, nargs='?', help="hoge") #argparse.SUPPRESS)
-parser.add_argument('-d', metavar='DELIM', default=',',
+parser.add_argument('filename', metavar='FILE', type=str, nargs='?', help=argparse.SUPPRESS)
+parser.add_argument('-d', '--delim', metavar='DELIM', default=',',
         help='Use DELIM as a input field separator. (default=",")')
 parser.add_argument('-c', '--column', metavar='FIELD', default=None, type=int,
         help='Column number to compute histogram from (default: rightmost column)')
@@ -42,7 +41,7 @@ parser.add_argument('-p', '--percentile', default=False, action='store_true',
         help='Show cummulative percent (percentile value) instead of percent per bucket')
 
 
-def open_and_read_file(fname=None):
+def open_and_read_file(fname=None, delim=','):
     if fname:
         if fname.endswith('.gz'):
             f = gzip.open(fname)
@@ -50,7 +49,7 @@ def open_and_read_file(fname=None):
             f = open(fname)
     else:
         f = sys.stdin
-    return pd.read_csv(f)
+    return pd.read_csv(f, delimiter=delim)
 
 
 def zeros(f):
@@ -73,7 +72,7 @@ def zeros(f):
 
 
 def main(args):
-    df = open_and_read_file(args.filename)
+    df = open_and_read_file(args.filename, args.delim)
 
     if args.column:
         nth = args.column
