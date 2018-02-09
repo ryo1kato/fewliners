@@ -68,53 +68,59 @@ def zeros(f):
                 break
         return z
 
+class CsvHistError(Exception):
+    pass
 
-def main(args):
-    df = open_and_read_file(args.filename, args.delim)
-
-    if args.column:
-        nth = args.column
-        if nth > len(df.columns):
-            sys.stderr.write("Invalid column position {} for --column; the data contains only {} columns\n".format(nth, len(df.columns)))
-            sys.exit(1)
-    else:
-        nth = len(df.columns)
-    data = df.iloc[:,[nth-1]]
-
-    if args.max:
-        range_max = args.max
-    else:
-        range_max = data.values.max()
-
-    if args.min:
-        range_min = args.min
-    else:
-        range_min = data.values.min()
+def hist(data, out=sys.stdout,
+        range_max=None,
+        range_min=None,
+        log_bucket=False,
+        bins=None,
+        csv=False,
+        log_bar=False,
+        percentile=False,
+        no_bar=False):
 
     # defaults to 80x24
     termsize = shutil.get_terminal_size()
-    if args.bins:
-        bins = args.bins
-    else:
-        bins = termsize.lines - TERM_HEIGHT_MARGIN
 
-    if args.log_bucket:
+    if not range_max:
+        if isinstance(data, pd.DataFrame):
+            range_max = data.values.max()
+        else:
+            try:
+                range_max = data.max()
+            except AttributeError:
+                range_max = max(data)
+
+    if not range_min:
+        if isinstance(data, pd.DataFrame):
+            range_min = data.values.min()
+        else:
+            try:
+                range_min = data.min()
+            except AttributeError:
+                range_min = min(data)
+
+    if not bins:
+        bins = termsize.lines - TERM_HEIGHT_MARGIN
+        if not log_bucket:
+            _, autoedges = np.histogram(data[:10000], bins='auto', range=(range_min,range_max))
+            if len(autoedges) - 1 < bins:
+                bins = autoedges
+
+    if log_bucket:
         if range_max <= 0:
-            sys.stderr("ERROR: Cannot use --log-bucket for negative value data\n")
-            sys.exit(1)
+            raise CsvHistError("ERROR: Cannot use --log-bucket for negative value data\n")
         if range_min <= 0:
             sys.stderr.write("WARNING: minimum value {} is not positive. Clipping at {}\n".format(range_min,range_max/1000000.0))
             range_min = range_max / 1000000.0
         bins = np.logspace(np.log10(range_min), np.log10(range_max), bins)
-    elif not args.bins:
-        _, autoedges = np.histogram(data[:10000], bins='auto', range=(range_min,range_max))
-        if len(autoedges) - 1 < bins:
-            bins = autoedges
 
     hist, edges = np.histogram(data, bins=bins, range=(range_min,range_max))
     total = sum(hist)
 
-    if args.csv:
+    if csv:
         fmt = CSVFMT
     else:
         cnt_digits = len(str(max(hist)))
@@ -134,20 +140,20 @@ def main(args):
     barmax = termsize.columns - len(fmt.format(b=1,c=1,p=1)) - len(SEP)
 
     maxcount = max(hist)
-    if args.log_bar:
+    if log_bar:
         maxlog = np.log10(maxcount)
         minlog = np.log10(max(1.0,min(hist)))
 
-    if args.percentile:
+    if percentile:
         percent = hist.cumsum() / float(total) * 100.
     else:
         percent = hist / float(total) * 100.
 
     for b, c, pct in zip(edges[1:], hist, percent):
-        if args.no_bar or args.csv:
+        if no_bar or csv:
             bar = ''
         else:
-            if args.log_bar:
+            if log_bar:
                 if c == 0:
                     barsize = 0
                 else:
@@ -156,7 +162,39 @@ def main(args):
             else:
                 barsize = int(barmax * c/maxcount)
             bar = SEP + BARCHAR*barsize
-        print(fmt.format(b=b,c=c,p=pct) + bar)
+        out.write(fmt.format(b=b,c=c,p=pct) + bar + '\n')
+
+
+def main(args):
+    df = open_and_read_file(args.filename, args.delim)
+    if args.column:
+        nth = args.column
+        if nth > len(df.columns):
+            sys.stderr.write("Invalid column position {} for --column; the data contains only {} columns\n".format(nth, len(df.columns)))
+            sys.exit(1)
+    else:
+        nth = len(df.columns)
+    data = df.iloc[:,[nth-1]]
+
+    try:
+        hist(data,
+                range_max  = args.max,
+                range_min  = args.min,
+                log_bucket = args.log_bucket,
+                bins       = args.bins,
+                csv        = args.csv,
+                log_bar    = args.log_bar,
+                percentile = args.percentile,
+                no_bar     = args.no_bar
+            )
+    except CsvHistError as e:
+        sys.stderr.write("ERROR: {}\n".format(e))
+        sys.exit(1)
+    #except Exception as e:
+    #    sys.stderr.write("ERROR: Unexpected error {}".format(e))
+    #    sys.exit(1)
+
+    sys.exit(0)
 
 
 if __name__ == '__main__':
