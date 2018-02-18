@@ -35,6 +35,8 @@ parser.add_argument('--min', metavar='MIN', default=None, type=float,
         help='clip the data with MIN')
 parser.add_argument('--max', metavar='MAX', default=None, type=float,
         help='clip the data with MAX')
+parser.add_argument('--barmax', metavar='BARMAX', default=None, type=float,
+        help='Maximum size of histogram bars. Default is based on terminal width')
 parser.add_argument('-p', '--percentile', default=False, action='store_true',
         help='Show cummulative percent (percentile value) instead of percent per bucket')
 
@@ -79,6 +81,7 @@ def hist(data, out=sys.stdout,
         csv=False,
         log_bar=False,
         percentile=False,
+        barmax=None,
         no_bar=False):
 
     # defaults to 80x24
@@ -137,7 +140,8 @@ def hist(data, out=sys.stdout,
             bfmt = "{:d}.{:d}f".format(int_digits+z+2, z+1)
         fmt = ASCIIFMT.format(bfmt=bfmt, cd=cnt_digits)
 
-    barmax = termsize.columns - len(fmt.format(b=1,c=1,p=1)) - len(SEP)
+    if not barmax:
+        barmax = termsize.columns - len(fmt.format(b=1,c=1,p=1)) - len(SEP)
 
     maxcount = max(hist)
     if log_bar:
@@ -185,7 +189,8 @@ def main(args):
                 csv        = args.csv,
                 log_bar    = args.log_bar,
                 percentile = args.percentile,
-                no_bar     = args.no_bar
+                no_bar     = args.no_bar,
+                barmax     = args.barmax
             )
     except CsvHistError as e:
         sys.stderr.write("ERROR: {}\n".format(e))
