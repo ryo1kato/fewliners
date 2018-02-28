@@ -1,0 +1,78 @@
+#!/usr/bin/env python
+
+desc="Plot histogram from CSV file"
+
+import argparse
+import sys, os
+import re
+import math
+import numpy as np
+import pandas as pd
+import gzip
+
+STATS=['total', 'count', 'avg', 'p0', 'p10', 'p50', 'p90', 'p99', 'p99.9', 'p99.99', 'p100']
+
+parser = argparse.ArgumentParser(description=desc)
+parser.add_argument('filename', metavar='FILE', type=str, nargs='?', help="hoge") #argparse.SUPPRESS)
+parser.add_argument('-d', metavar='DELIM', default=',',
+        help='Use DELIM as a input field separator. (default=",")')
+parser.add_argument('-c', '--column', metavar='FIELD', default=None, type=int,
+        help='Column number to compute perentile from (default: rightmost column)')
+parser.add_argument('--min', metavar='MIN', default=None, type=float,
+        help='clip the data with MIN')
+parser.add_argument('--max', metavar='MAX', default=None, type=float,
+        help='clip the data with MAX')
+# FIXME
+parser.add_argument('-p', '--percentile', default=None, type=str,
+        help='Specify list of statistical values to output.'
+             'default is {}'.format(STATS))
+# FIXME: human readable
+
+
+def open_and_read_file(fname=None, delimiter=','):
+    if fname:
+        if fname.endswith('.gz'):
+            f = gzip.open(fname)
+        else:
+            f = open(fname)
+    else:
+        f = sys.stdin
+    return pd.read_csv(f, delimiter=delimiter)
+
+
+def getstat(a, s='avg'):
+    if s == 'avg' or s == 'mean':
+        return a.values.mean()
+    elif s == 'total' or s == 'sum':
+        return a.values.sum()
+    elif s == 'count' or s == 'n':
+        return len(a.values)
+    elif s[0] == 'p':
+        return np.percentile(a, float(s[1:]))
+    else:
+        raise Exception("cannot interpret string '{}'".format(s))
+
+
+def main(args):
+    df = open_and_read_file(args.filename)
+
+    if args.percentile:
+        stats = args.percentile.split(',')
+    else:
+        stats = STATS
+
+    if args.column:
+        nth = args.column
+        if nth > len(df.columns):
+            sys.stderr.write("Invalid column position {} for --column; the data contains only {} columns\n".format(nth, len(df.columns)))
+            sys.exit(1)
+    else:
+        nth = len(df.columns)
+    data = df.iloc[:,[nth-1]]
+
+    for s in stats:
+        print("{:6s}: {:g}".format(s, getstat(data, s)))
+
+
+if __name__ == '__main__':
+    main(parser.parse_args(sys.argv[1:]))
