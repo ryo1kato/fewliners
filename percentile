@@ -13,8 +13,8 @@ import gzip
 STATS=['total', 'count', 'avg', 'p0', 'p10', 'p50', 'p90', 'p99', 'p99.9', 'p99.99', 'p100']
 
 parser = argparse.ArgumentParser(description=desc)
-parser.add_argument('filename', metavar='FILE', type=str, nargs='?', help="hoge") #argparse.SUPPRESS)
-parser.add_argument('-d', metavar='DELIM', default=',',
+parser.add_argument('filenames', metavar='FILE', type=str, nargs='*', help=argparse.SUPPRESS)
+parser.add_argument('-d', '--delimiter', metavar='DELIM', default=',',
         help='Use DELIM as a input field separator. (default=",")')
 parser.add_argument('-c', '--column', metavar='FIELD', default=None, type=int,
         help='Column number to compute perentile from (default: rightmost column)')
@@ -22,6 +22,10 @@ parser.add_argument('--min', metavar='MIN', default=None, type=float,
         help='clip the data with MIN')
 parser.add_argument('--max', metavar='MAX', default=None, type=float,
         help='clip the data with MAX')
+parser.add_argument('-C','--csv', action='store_true', default=False,
+        help='output in CSV format')
+parser.add_argument('-H','--no-header', action='store_true',
+        help='Do not print header when output in CSV format')
 # FIXME
 parser.add_argument('-p', '--percentile', default=None, type=str,
         help='Specify list of statistical values to output.'
@@ -30,14 +34,17 @@ parser.add_argument('-p', '--percentile', default=None, type=str,
 
 
 def open_and_read_file(fname=None, delimiter=','):
-    if fname:
+    if not fname or fname == '-':
+        f = sys.stdin
+        fname = '(stdin)'
+    else:
         if fname.endswith('.gz'):
             f = gzip.open(fname)
         else:
             f = open(fname)
-    else:
-        f = sys.stdin
-    return pd.read_csv(f, delimiter=delimiter)
+    df = pd.read_csv(f, delimiter=delimiter)
+    df.name = fname
+    return df
 
 
 def getstat(a, s='avg'):
@@ -54,24 +61,33 @@ def getstat(a, s='avg'):
 
 
 def main(args):
-    df = open_and_read_file(args.filename)
-
     if args.percentile:
         stats = args.percentile.split(',')
     else:
         stats = STATS
 
-    if args.column:
-        nth = args.column
-        if nth > len(df.columns):
-            sys.stderr.write("Invalid column position {} for --column; the data contains only {} columns\n".format(nth, len(df.columns)))
-            sys.exit(1)
-    else:
-        nth = len(df.columns)
-    data = df.iloc[:,[nth-1]]
+    if args.csv and not args.no_header:
+        print(args.delimiter.join(stats))
 
-    for s in stats:
-        print("{:6s}: {:g}".format(s, getstat(data, s)))
+    for fname in args.filenames or ['-']:
+        df = open_and_read_file(fname, args.delimiter)
+
+        if args.column:
+            nth = args.column
+            if nth > len(df.columns):
+                sys.stderr.write("Invalid column position {} for --column; "
+                                 "the input '{}' contains only {} columns\n".format(nth, df.name, len(df.columns)))
+                sys.exit(1)
+        else:
+            nth = len(df.columns)
+
+        data = df.iloc[:,[nth-1]]
+
+        if args.csv:
+            print(args.delimiter.join(["{:g}".format(getstat(data,s)) for s in stats]))
+        else:
+            for s in stats:
+                print("{:6s}: {:g}".format(s, getstat(data, s)))
 
 
 if __name__ == '__main__':
