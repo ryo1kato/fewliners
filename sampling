@@ -1,0 +1,66 @@
+#!/usr/bin/env python
+#
+# Copyright 2010 Bitly
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may
+# not use this file except in compliance with the License. You may obtain
+# a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations
+# under the License.
+# ------------------------------------
+# Modified based on https://github.com/bitly/data_hacks/blob/master/data_hacks/sample.py
+#
+
+import sys
+import random
+from optparse import OptionParser
+from decimal import Decimal
+
+def run(sample_rate, input_stream):
+    for line in input_stream:
+        if random.randint(1,1000) <= sample_rate:
+            sys.stdout.write(line)
+
+def get_sample_rate(rate_string):
+    """ return a rate as a permille"""
+    if rate_string.endswith("%"):
+        rate = float(rate_string[:-1])/100
+    elif '/' in rate_string:
+        x, y  = rate_string.split('/')
+        rate = Decimal(x) / (Decimal(y) * Decimal('1.0'))
+    else:
+        rate = float(rate_string)
+    if rate < 0 or rate > 1:
+        raise ValueError('rate %r (=%.3f) must be 1%% <= rate <= 100%% ' % (rate_string, rate))
+    return int(rate * 1000)
+
+if __name__ == "__main__":
+    parser = OptionParser(usage="%prog SAMPLE_RATE [FILE...]")
+    (options, args) = parser.parse_args()
+
+    if len(args) == 1 and sys.stdin.isatty():
+        parser.print_usage()
+        sys.exit(1)
+
+    try:
+        sample_rate = get_sample_rate(sys.argv[1])
+    except ValueError as e:
+        sys.stderr.write(str(e) + '\n')
+        parser.print_usage()
+        sys.exit(1)
+
+    if len(args) == 2 and args[1] != '-':
+        istream = open(args[1])
+    else:
+        istream = sys.stdin
+
+    try:
+        run(sample_rate, istream)
+    except KeyboardInterrupt:
+        pass
