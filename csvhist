@@ -15,6 +15,8 @@ TERM_HEIGHT_MARGIN=5
 ASCIIFMT="{{b:{bfmt}}}"+SEP+"{{c:{cd}d}}"+SEP[:-1]+"{{p:6.2f}}%"
 CSVFMT="{b:.4f},{c},{p:.4f}"
 
+SAMPLE_SIZE=500000
+
 parser = argparse.ArgumentParser(description=desc)
 parser.add_argument('filename', metavar='FILE', type=str, nargs='?', help=argparse.SUPPRESS)
 parser.add_argument('-d', '--delim', metavar='DELIM', default=',',
@@ -106,10 +108,12 @@ def hist(data, out=sys.stdout,
                 range_min = min(data)
 
     if not bins:
-        bins = termsize.lines - TERM_HEIGHT_MARGIN
+        lines = termsize.lines - TERM_HEIGHT_MARGIN
+        maxbins = len(np.unique(data[:SAMPLE_SIZE]))
+        bins = min(maxbins, lines)
         if not log_bucket:
-            _, autoedges = np.histogram(data[:10000], bins='auto', range=(range_min,range_max))
-            if len(autoedges) - 1 < bins:
+            _, autoedges = np.histogram(data[:SAMPLE_SIZE], bins='auto', range=(range_min,range_max))
+            if maxbins < len(autoedges) - 1 < bins:
                 bins = autoedges
 
     if log_bucket:
@@ -129,9 +133,9 @@ def hist(data, out=sys.stdout,
         cnt_digits = len(str(max(hist)))
         int_digits = max(len(str(int(edges[ 1]))),
                          len(str(int(edges[-1]))))
-        mindiff = min(np.diff(edges[1:]))
+        mindiff = min(np.diff(edges))
         if mindiff < 0.0001:
-            digits = max([len("{:.5g}".format(b)) for b in edges[1:]])
+            digits = max([len("{:.5g}".format(b)) for b in edges])
             bfmt = "{:d}.5g".format(digits)
         elif mindiff >= 1:
             bfmt = "{:d}.0f".format(int_digits)
