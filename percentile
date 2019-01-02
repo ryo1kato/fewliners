@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import gzip
 
-STATS=['total', 'count', 'avg', 'p0', 'p10', 'p50', 'p90', 'p99', 'p99.9', 'p99.99', 'p100']
+STATS=['total', 'count', 'avg', 'sigma', 'p0', 'p10', 'p50', 'p90', 'p99', 'p99.9', 'p99.99', 'p100']
 
 parser = argparse.ArgumentParser(description=desc)
 parser.add_argument('filenames', metavar='FILE', type=str, nargs='*', help=argparse.SUPPRESS)
@@ -48,12 +48,14 @@ def open_and_read_file(fname=None, delimiter=','):
 
 
 def getstat(a, s='avg'):
-    if s == 'avg' or s == 'mean':
+    if s in ['avg', 'average', 'mean']:
         return a.values.mean()
     elif s == 'total' or s == 'sum':
         return a.values.sum()
     elif s == 'count' or s == 'n':
         return len(a.values)
+    elif s in ['stddev', 'stdev', 'sigma']:
+        return a.values.std()
     elif s[0] == 'p':
         return np.percentile(a, float(s[1:]))
     else:
