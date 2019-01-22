@@ -76,7 +76,7 @@ def main(args):
     else:
         stats = STATS
 
-    if args.csv and not args.no_header:
+    if args.csv and not args.no_csv_header:
         print(args.delimiter.join(stats))
 
     for fname in args.filenames or ['-']:
