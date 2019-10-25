@@ -1,0 +1,113 @@
+#!/usr/bin/env python
+import pandas as pd
+import argparse
+import sys, os
+import gzip
+
+DESC = 'Aggregate timeseries data by regular time interval (bucket). Also known as resample.'
+
+NanoSec = 1000000000.
+DEFAULT_INTERVAL = 30
+
+parser = argparse.ArgumentParser(description=DESC)
+parser.add_argument('filename', metavar='FILE', type=str, nargs='?', help=argparse.SUPPRESS)
+parser.add_argument('-d', '--delimiter', metavar='DELIM', default=',',
+        help='Use DELIM as a input field separator. (default=",")')
+data = parser.add_mutually_exclusive_group()
+data.add_argument('-c', '--column', metavar='FIELD', default=None, type=int,
+        help='Column number to compute perentile from (default: rightmost column)')
+data.add_argument('--interval', action='store_true', default=False,
+        help='Use timestamp interval instead of a specified column aggregate/resample.')
+
+parser.add_argument('-m', '--ms', '--millisec', metavar='MILLISEC', default=None, type=int,
+        help='Aggregation interval in milli-seconds - shorthand for --freq="<MILLISEC>ms"')
+parser.add_argument('-f', '--freq', metavar='NUM_WITH_SUFFIX', default=None, type=str,
+        help='Aggregation window size with one of [H, min, S, ms] suffix for hour, minute, seconds, or millisecs')
+aggregator = parser.add_mutually_exclusive_group()
+aggregator.add_argument('--count', action='store_true', help='Use count aggregator (default)')
+aggregator.add_argument('--avg', '--mean', action='store_true', help='Use average aggregator')
+aggregator.add_argument('--sum', action='store_true', help='Use sum aggregator')
+aggregator.add_argument('--max', action='store_true', help='Use maximum aggregator')
+aggregator.add_argument('--min', action='store_true', help='Use minimum aggregator')
+aggregator.add_argument('--stdev', '--sigma', action='store_true', help='Use standard deviation aggregator')
+aggregator.add_argument('--sigma-to-mean', action='store_true', help='Use sigma-to-mean ratio aggregator')
+aggregator.add_argument('--variance-to-mean', action='store_true', help='Use variance-to-mean ratio aggregator')
+aggregator.add_argument('--fano', action='store_true', help='Compute Fano-factor - variance/mean of counts in given time windows')
+
+
+
+def open_and_read_file(fname=None, delimiter=','):
+    if not fname or fname == '-':
+        f = sys.stdin
+        fname = '(stdin)'
+    else:
+        if fname.endswith('.gz'):
+            f = gzip.open(fname)
+        else:
+            f = open(fname)
+    df = pd.read_csv(f, delimiter=delimiter)
+    df.name = fname
+    return df
+
+
+def main(args):
+    df = open_and_read_file(args.filename)
+
+    freq = "{}ms".format(DEFAULT_INTERVAL)
+    if args.ms:
+        freq = "{}ms".format(args.ms)
+    if args.freq:
+        freq = args.freq
+
+    if args.column:
+        nth = args.column
+        if nth > len(df.columns):
+            sys.stderr.write("Invalid column position {} for --column; "
+                             "the input '{}' contains only {} columns\n".format(nth, df.name, len(df.columns)))
+            sys.exit(1)
+    else:
+        nth = len(df.columns)
+
+    df = df.sort_values(by=df.columns[0])
+
+    if args.interval:
+        df['data'] = df.iloc[:,0].diff()
+    elif nth == 1:
+        # all-one if there's only one column (timestamp) in the data.
+        df['data'] = 1
+    else:
+        df['data'] = df.iloc[:,[nth-1]]
+
+    df.index = pd.to_datetime(df.iloc[:,0]* NanoSec)
+
+    resampler = df.resample(freq)
+    if args.fano:
+        resampled = resampler.count()
+        print(resampled.values.var() / resampled.values.mean())
+    else:
+        if args.avg:
+            resampled = resampler.mean()
+        elif args.sum:
+            resampled = resampler.sum()
+        elif args.max:
+            resampled = resampler.max()
+        elif args.min:
+            resampled = resampler.min()
+        elif args.stdev:
+            resampled = resampler.std()
+        elif args.sigma_to_mean:
+            resampled = resampler.std() / resampler.mean()
+        elif args.variance_to_mean:
+            resampled = resampler.var() / resampler.mean()
+        else:
+            resampled = resampler.count()
+
+        resampled.index = resampled.index.astype(int)/NanoSec
+        resampled['data'].to_csv('/dev/stdout', header=False)
+
+
+if __name__ == '__main__':
+    try:
+        main(parser.parse_args(sys.argv[1:]))
+    except BrokenPipeError:
+        pass
