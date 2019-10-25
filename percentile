@@ -25,15 +25,23 @@ parser.add_argument('--max', metavar='MAX', default=None, type=float,
 parser.add_argument('-C','--csv', action='store_true', default=False,
         help='output in CSV format')
 parser.add_argument('-H','--no-header', action='store_true',
+        help='Input file does not contain a header line')
+parser.add_argument('-N','--no-csv-header', action='store_true',
         help='Do not print header when output in CSV format')
 # FIXME
-parser.add_argument('-p', '--percentile', default=None, type=str,
+parser.add_argument('-s', '--stat', '--stats', '-p', '--percentile', default=None, type=str,
         help='Specify list of statistical values to output.'
              'default is {}'.format(STATS))
 # FIXME: human readable
 
+def die(msg, errcode=1):
+    sys.stderr.write('ERROR: ' + msg + '\n')
+    sys.exit(errcode)
 
-def open_and_read_file(fname=None, delimiter=','):
+def warn(msg):
+    sys.stderr.write('WARNING: ' + msg + '\n')
+
+def open_and_read_file(fname=None, delimiter=',', header=None):
     if not fname or fname == '-':
         f = sys.stdin
         fname = '(stdin)'
@@ -42,7 +50,7 @@ def open_and_read_file(fname=None, delimiter=','):
             f = gzip.open(fname)
         else:
             f = open(fname)
-    df = pd.read_csv(f, delimiter=delimiter)
+    df = pd.read_csv(f, delimiter=delimiter, header=header)
     df.name = fname
     return df
 
@@ -63,27 +71,33 @@ def getstat(a, s='avg'):
 
 
 def main(args):
-    if args.percentile:
-        stats = args.percentile.split(',')
+    if args.stat:
+        stats = args.stat.split(',')
     else:
         stats = STATS
 
-    if args.csv and not args.no_header:
+    if args.csv and not args.no_csv_header:
         print(args.delimiter.join(stats))
 
     for fname in args.filenames or ['-']:
-        df = open_and_read_file(fname, args.delimiter)
+        if args.no_header:
+            header = None
+        else:
+            header = 'infer'
+        df = open_and_read_file(fname, args.delimiter, header)
 
         if args.column:
             nth = args.column
             if nth > len(df.columns):
-                sys.stderr.write("Invalid column position {} for --column; "
-                                 "the input '{}' contains only {} columns\n".format(nth, df.name, len(df.columns)))
-                sys.exit(1)
+                die("Invalid column position {} for --column; "
+                    "the input '{}' contains only {} columns\n".format(nth, df.name, len(df.columns)))
         else:
             nth = len(df.columns)
 
         data = df.iloc[:,[nth-1]]
+        header = str(data.columns[0])
+        if not args.no_header and re.match('\s*-?[0-9]+(.[0-9]+)?', header):
+            warn("First line of the column looks like a datum ('{}') but ignored as a header. Use --no-header to not ignore.".format(header))
 
         if args.csv:
             print(args.delimiter.join(["{:g}".format(getstat(data,s)) for s in stats]))
