@@ -1,0 +1,78 @@
+#!/usr/bin/env python3
+import os
+import sys
+
+class InvalidSetOp(Exception):
+    pass
+
+def print_help(to=sys.stdout):
+    usage_text = '''Usage: {} FILE1 OP1 FILE2
+line by line set operation for FILE1 and FILE2 (union (or, '|'), intersection (and, '&'), difference (diff, '-'), etc.
+all Python set operations are supported)'
+'''.format(os.path.basename(sys.argv[0]))
+    print(usage_text, file=to)
+
+
+def err(msg, *args):
+    print("ERROR: " + msg, *args, file=sys.stderr)
+
+
+def loadset(fname):
+    return {l.strip() for l in open(fname)}
+
+
+def setop(s1, s2, op):
+    op = op.lower()
+    if   op in ['isdisjoint', 'disjoint']:
+        return s1.isdisjoint(s2)
+    elif op in ['&', 'and', 'intersection']:
+        return s1 & s2
+    elif op in ['|', 'or', 'union']:
+        return s1 | s2
+    elif op in ['^', 'xor', 'symmetric_difference']:
+        return s1 ^ s2
+    elif op in ['-', 'diff', 'difference']:
+        return s1 - s2
+    elif op in ['>=', 'issuperset', 'superset']:
+        return s1 >= s2
+    elif op in ['<=', 'issubset', 'subset']:
+        return s1 <= s2
+    elif op in ['>']:
+        return s1 > s2
+    elif op in ['<']:
+        return s1 < s2
+    else:
+        raise InvalidSetOp("Unknown set operation '{}'".format(op))
+
+
+if __name__ == "__main__":
+    arglen = len(sys.argv)
+    if arglen != 4:
+        if arglen == 2 and sys.argv[1] in ['-h', '--help']:
+            print_help()
+            sys.exit(0)
+        else:
+            print_help(to=sys.stderr)
+            sys.exit(1)
+
+    file1 = sys.argv[1]
+    op1   = sys.argv[2]
+    file2 = sys.argv[3]
+
+    set1 = loadset(file1)
+    set2 = loadset(file2)
+    try:
+        result = setop(set1, set2, op1)
+    except InvalidSetOp as e:
+        err("Invalid set operation: {}".format(e))
+        sys.exit(2)
+
+    if isinstance(result, bool):
+        if result:
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    else:
+        for item in result:
+            print(item)
+
