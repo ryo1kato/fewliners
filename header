@@ -34,6 +34,12 @@ DIE () { ERROR "$*"; exit 1; }
 
 [ $# -eq 0 ] && { DIE "Give a command name. See '--help' for options."; }
 
+if [[ $1 =~ ^-h|--help$ ]]
+then
+    print_help
+    exit 0
+fi
+
 case "$0" in
     */header|header)  command="$1"; shift ;;
     */h*)  command="${0##*/h}" ;;
