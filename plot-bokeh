@@ -1,0 +1,151 @@
+#!/usr/bin/env python
+
+from bokeh import palettes
+from bokeh.models import HoverTool
+from bokeh.models.formatters import DatetimeTickFormatter
+from datetime import timedelta
+import argparse
+import bokeh.plotting as bp
+import gzip
+import itertools
+import pandas as pd
+import numpy as np
+import sys, os, re
+
+desc="Plot CSV like data with Bokeh as an interactive HTML file"
+
+PLOT_WIDTH=1200
+PLOT_HEIGHT=600
+
+parser = argparse.ArgumentParser(description=desc)
+parser.add_argument('flist', metavar='FILES', type=str, nargs='*', help=argparse.SUPPRESS)
+parser.add_argument('-d', '--delim', metavar='DELIM', default=',',
+        help='Use DELIM as a input field separator. (default=",")')
+parser.add_argument('-c', '--column', metavar='NTH_COLUMN', default=2, type=int,
+        help='Used NTH_FIELD column instead of 2nd column for Y axis data')
+#parser.add_argument('--min', metavar='MIN', default=None, type=float,
+#        help='clip the data with MIN')
+#parser.add_argument('--max', metavar='MAX', default=None, type=float,
+#        help='clip the data with MAX')
+parser.add_argument('-t', '--tsd', default=False, action='store_true',
+        help='Assume timeseries data. Use DatetimeTickFormatter for X axis. If leftmost column is float, assume number of seconds from Unix epoch. Otherwise try to parse it as date time string')
+parser.add_argument('-L', '--no-legend', default=False, action='store_true',
+        help='Disable legend')
+parser.add_argument('-o', '--output', metavar='OUTFILE', default=None, type=str,
+        help='Specify output filename. Default is to use input file name')
+parser.add_argument('--width', metavar='PIXELS', default=None, type=int, help='Width of plot in pixels (default: %d)' % PLOT_WIDTH)
+parser.add_argument('--height', metavar='PIXELS', default=None, type=int, help='Height of plot in pixels(default: %d)' % PLOT_HEIGHT)
+parser.add_argument('--xlabel', metavar='LABEL', default=None, type=str, help='X axis label')
+parser.add_argument('--ylabel', metavar='LABLE', default=None, type=str, help='Y axis label')
+parser.add_argument('--title', metavar='TITLE', default=None, type=str, help='Graph title (default: use input filename.)')
+
+DTFormat = DatetimeTickFormatter(
+    microseconds = ["%b %d %H:%M:%S.%3N"],
+    milliseconds = ["%b %d %H:%M:%S.%3N"],
+    seconds      = ["%b %d %H:%M:%S"],
+    minsec       = ["%b %d %H:%M:%S"],
+    minutes      = ["%b %d %H:%M"],
+    hourmin      = ["%b %d %H:%M"],
+    hours        = ["%b %d %H:%M"],
+    days         = ["%Y %b %d"],
+    months       = ["%Y %b"],
+    years        = ["%Y"])
+
+TOOLS="tap,pan,xwheel_zoom,zoom_in,zoom_out,box_zoom,undo,redo,reset,save"
+
+def to_datetime(arg):
+    try:
+        f = float(arg)
+        return pd.to_datetime(arg, unit='s')  # float is always assumed to be number of seconds since Epoch
+    except ValueError:
+        return pd.to_datetime(arg)
+
+def read_csv(fname=None, tsd=False, delim=',', y_data=1):
+    if fname and fname != '-':
+        name = os.path.basename(fname)
+        if fname.endswith('.gz'):
+            f = gzip.open(fname)
+        else:
+            f = open(fname)
+    else:
+        name = '(stdin)'
+        f = sys.stdin
+    if tsd:
+        df = pd.read_csv(f, usecols=[0,y_data], delimiter=delim, parse_dates=[0], date_parser=to_datetime)
+    else:
+        df = pd.read_csv(f, usecols=[0,y_data], dtype='float', delimiter=delim)
+    df.name = name
+    if re.match(r'^\s*\d+(.\d+)\s*$', df.columns[0]):
+        df.xname = 'x'
+        df.yname = 'y'
+    else:
+        df.xname = df.columns[0]
+        df.yname = df.columns[1]
+    df.columns = ['x', 'y']
+    return df
+
+
+def determine_output_filename(flist):
+    if not flist:
+        return "plot.html"
+    else:
+        prefix = os.path.commonprefix(flist)
+        if prefix[-1] in ['/', '.', '-', '_']:
+            return prefix[:-1] + ".html"
+        else:
+            return prefix + ".html"
+
+
+def main(args):
+    if args.flist:
+        dflist = [read_csv(f, args.tsd, delim=args.delim, y_data=args.column - 1) for f in args.flist]
+    else:
+        dflist = [read_csv(None, args.tsd, delim=args.delim, y_data=args.column - 1)]
+
+    xlabel = args.xlabel or (args.tsd and "Datetime") or dflist[0].xname
+    ylabel = args.ylabel or dflist[0].yname
+    outfile = args.output or determine_output_filename(args.flist)
+    title = args.title or outfile
+
+    if args.tsd:
+        avg_interval = dflist[0].x.diff().mean()
+        if avg_interval < timedelta(seconds=1):
+            xtooltip = "@x{%F %H:%M:%S +%3Nms}"  # millisec
+        elif avg_interval < timedelta(seconds=60):
+            xtooltip = "@x{%F %H:%M:%S}"  # sec
+        else:
+            xtooltip = "@x{%F %H:%M}"  # min
+        fmtr = {"x": "datetime"}
+    else:
+        xtooltip = "$x"
+        fmtr = None
+    print("xtooltip", xtooltip)
+    print("fmtr", fmtr)
+    tooltips = [ (xlabel, xtooltip), (ylabel, "$name: $y{0,0}")]
+    hover = HoverTool(tooltips=tooltips, formatters=fmtr)
+
+    w = args.width or PLOT_WIDTH
+    h = args.height or PLOT_HEIGHT
+
+    p = bp.figure(tools=[TOOLS, hover], title=title, plot_width=w, plot_height=h)
+
+    if args.tsd:
+        p.xaxis.formatter= DTFormat
+
+    p.xaxis.axis_label = xlabel
+    p.yaxis.axis_label = ylabel
+
+    for df, color in zip(dflist, palettes.plasma(len(dflist))):
+        if args.no_legend:
+            p.line(df.x, df.y, name=df.name, color=color)
+        else:
+            p.line(df.x, df.y, name=df.name, legend=df.name, color=color)
+        p.circle(df.x, df.y, color=color)
+
+    sys.stderr.write("Output: " + outfile + "\n")
+    bp.output_file(outfile)
+    bp.save(p)
+
+
+if __name__ == '__main__':
+    main(parser.parse_args(sys.argv[1:]))
