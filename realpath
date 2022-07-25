@@ -29,7 +29,7 @@ done
 
 # else, use python. Might be slow.
 
-/usr/bin/env python -c '
+/usr/bin/env python3 -c '
 import sys
 import os
 

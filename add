@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 #
 desc="Calculate sum/avg/min/max or percentile of columns for CSV like data."
@@ -7,11 +7,12 @@ import math
 import argparse
 import re
 import sys
+from itertools import zip_longest
 
 parser = argparse.ArgumentParser(description=desc)
 parser.add_argument('filename', metavar='FILE', type=str, nargs='?')
 parser.add_argument('-F', metavar='IFS', default=None,
-        help='Input field separator, like awk (default: auto-detect')
+        help='Input field separator, like awk (default: auto-detect)')
 #parser.add_argument('--strict', dest='ignore_error', action='store_true', default=False,
 #            help='Do not ignore malformed field in the input.')
 #parser.add_argument('--ignore', action='store_true', default=False,
@@ -60,6 +61,11 @@ def guess_delimiter(line):
 class Tabulation(object):
     def __init__(self, firstline=None, delimiter=None,
                 ignore=False, ignore_error=False, ignore_empty=True):
+        """
+        >>> t = Tabulation("1,2,3")
+        >>> t.accum
+        [[1], [2], [3]]
+        """
         self.accum        = None
         self.delim        = None
         self.ignore       = ignore
@@ -78,8 +84,7 @@ class Tabulation(object):
                 self.delim = delimiter
             cols = firstline
         else:
-            cols = self.split(firstline)
-
+            cols = self.split(firstline, delimiter)
         self.initialized = True
 
         # when first line is a non-number cell,
@@ -160,6 +165,14 @@ class Tabulation(object):
                 return a + [num]
 
     def feed(self, cols):
+        """
+        >>> t = Tabulation("1,2,3")
+        >>> t.accum
+        [[1], [2], [3]]
+        >>> t.feed(["4","5","6"])
+        >>> t.accum
+        [[1, 4], [2, 5], [3, 6]]
+        """
         if not self.initialized:
             self._initialize(cols)
         else:
@@ -173,11 +186,11 @@ class Tabulation(object):
                 key = cols[0]
                 cols = cols[1:]
                 if key in self.accum:
-                    self.accum[key] = map(self._combine, self.accum[key], cols)
+                    self.accum[key] = [self._combine(a, b) for a, b in zip_longest(self.accum[key], cols)]
                 else:
-                    self.accum[key] = map(self._combine, [], cols)
+                    self.accum[key] = [self._combine(a, b) for a, b in zip_longest([], cols)]
             elif isinstance(self.accum, list):
-                self.accum = map(self._combine, self.accum, cols)
+                self.accum = [self._combine(a, b) for a, b in zip_longest(self.accum, cols)]
             else:
                 raise Exception("You found a bug")
 
@@ -185,6 +198,8 @@ class Tabulation(object):
     def feedline(self, line, delimiter=None):
         """
         >>> t = Tabulation("1,2,3")
+        >>> t.accum
+        [[1], [2], [3]]
         >>> t.feedline("4,5,6")
         >>> t.accum
         [[1, 4], [2, 5], [3, 6]]
@@ -205,10 +220,10 @@ class Tabulation(object):
         if isinstance(self.accum, dict):
             a = {}
             for i in self.accum:
-                a[i] = map(f, self.accum[i])
+                a[i] = list(map(f, self.accum[i]))
             return a
         elif isinstance(self.accum, list):
-            return map(f, self.accum)
+            return list(map(f, self.accum))
         else:
             return None
 
@@ -267,15 +282,14 @@ class Tabulation(object):
 
         if isinstance(s, dict):
             for key in self.accum:
-                outfd.write(ofs.join([key] + map(str, s[key])) + '\n')
+                outfd.write(ofs.join([key] + list(map(str, s[key]))) + '\n')
             return True
         elif isinstance(s, list):
-            outfd.write(ofs.join(map(str,s)) + '\n')
+            outfd.write(ofs.join(list(map(str,s))) + '\n')
             return True
         else:
             # empty input
             return False
-
 
 
 def calc_lines(i, delimiter=None):
@@ -286,47 +300,47 @@ def calc_lines(i, delimiter=None):
 
 
 
-def main(args):
-    if (args and args[0] == '--doctest'):
+def main(raw_args):
+    if (raw_args and raw_args[0] == '--doctest'):
         import doctest
         doctest.testmod()
     else:
-        args = parser.parse_args(args)
+        args = parser.parse_args(raw_args)
         if args.filename:
             f = open(args.filename)
             t = calc_lines(f, args.F)
         else:
             t = calc_lines(sys.stdin, args.F)
 
-    def maybe_print_stat_name(name):
-        # Print name of stat iff more than one stat are specified.
-        # Make it a new leftmost column if the input is single attribute values.
-        # Make it like a section header if the input is multi-attribute.
-        if len(args.percentile or []) + len(args.calc or []) <= 1:
-            pass
-        else:
-            if t.multi_attribute():
-                sys.stdout.write("==== {} ====\n".format(name))
+        def maybe_print_stat_name(name):
+            # Print name of stat iff more than one stat are specified.
+            # Make it a new leftmost column if the input is single attribute values.
+            # Make it like a section header if the input is multi-attribute.
+            if len(args.percentile or []) + len(args.calc or []) <= 1:
+                pass
             else:
-                sys.stdout.write("{}{}".format(name, t.delim))
+                if t.multi_attribute():
+                    sys.stdout.write("==== {} ====\n".format(name))
+                else:
+                    sys.stdout.write("{}{}".format(name, t.delim))
 
-    if args.percentile or args.calc:
-        for p in args.percentile or []:
-            maybe_print_stat_name("p{}".format(p))
-            ret = t.output(sys.stdout, 'percentile', float(p),
-                     print_header=args.with_header)
-        for c in args.calc or []:
-            maybe_print_stat_name(c)
-            ret = t.output(sys.stdout, c, print_header=args.with_header)
-    else:
-        # default is 'sum' as the name of this command suggests.
-        ret = t.output(sys.stdout, 'sum', print_header=args.with_header)
+        if args.percentile or args.calc:
+            for p in args.percentile or []:
+                maybe_print_stat_name("p{}".format(p))
+                ret = t.output(sys.stdout, 'percentile', float(p),
+                         print_header=args.with_header)
+            for c in args.calc or []:
+                maybe_print_stat_name(c)
+                ret = t.output(sys.stdout, c, print_header=args.with_header)
+        else:
+            # default is 'sum' as the name of this command suggests.
+            ret = t.output(sys.stdout, 'sum', print_header=args.with_header)
 
-    if ret:
-        sys.exit(0)
-    else:
-        # Malformed or empty input
-        sys.exit(1)
+        if ret:
+            sys.exit(0)
+        else:
+            # Malformed or empty input
+            sys.exit(1)
 
 
 if __name__ == '__main__':
