@@ -126,6 +126,19 @@ done
 
 [ $# -lt 1 ] && DIE "Too few arguments"
 
+
+if [ -n "$opt_output" ]
+then
+    if ! install --version 2>&1 | grep -q 'GNU'
+    then
+        if which ginstall > /dev/null; then
+            install () { ginstall "$@"; }
+        else
+            DIE "You need GNU version of 'install' command for '--output'"
+        fi
+    fi
+fi
+
 output_per_command='no'
 case "$opt_output" in
     '')     : ;;
@@ -144,7 +157,6 @@ esac
 
 max_jobs=$opt_jobs
 (( max_jobs > 1 )) || max_jobs=1
-
 
 
 
